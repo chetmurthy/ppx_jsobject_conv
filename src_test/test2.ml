@@ -95,7 +95,10 @@ let () = should_parse "xx4b right" {|["Right",["foo",true]]|}
                       xx4b_of_jsobject
                       jsobject_of_xx4b
 
-type xx2 = Foo1 of int | Foo2 of bool | Foo3 of bool * int | Foo4 of (bool * int) [@@deriving jsobject]
+type xx2 = Foo0 | Foo1 of int | Foo2 of bool | Foo3 of bool * int | Foo4 of (bool * int) [@@deriving jsobject]
+let () = should_parse "xx2 Foo0" {|["Foo0"]|}
+                      xx2_of_jsobject
+                      jsobject_of_xx2
 let () = should_parse "xx2 Foo1" {|["Foo1",1]|}
                       xx2_of_jsobject
                       jsobject_of_xx2

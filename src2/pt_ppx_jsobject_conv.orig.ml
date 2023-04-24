@@ -799,7 +799,7 @@ module Jsobject_of_expander_2 = struct
                  pl rhs in
      [{%value_binding| $lid:fname$ = $rhs$ |}]
 
-  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} when Attrs.define_sum_type_as cl = `Regular ->
      let fname = name_of_tdname tname in
      let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
                           let fname = Printf.sprintf "_of_%s" v in
@@ -807,7 +807,9 @@ module Jsobject_of_expander_2 = struct
      let cases =
        cl
        |> List.concat_map (function
-                {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+                {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+                 [{%case| $uid:cid$ -> to_js_array [jsobject_of_string $string:cid$] |}]
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
                  core_type_to_jsobject_of ~prepend_pattern:cid ~wrap_body:cid rho ty
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                  core_type_to_jsobject_of ~prepend_pattern:cid ~prepend_body:cid rho {%core_type| $tuplelist:tyl$ |})
@@ -1558,7 +1560,10 @@ module Of_jsobject_expander_2 = struct
      let cases =
        cl
        |> List.map (function
-                {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+                {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+                 let rhs = {%expression| Ok $uid:cid$ |} in
+                 (cid, rhs)
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
                  let rhs = core_type_to_of_jsobject rho ty in
                  let rhs = {%expression|
                             (((array_get_ind arr 1) >>= $rhs$) >*=
