@@ -123,7 +123,6 @@ let () = should_parse "xx3 Bar3" {|[true,1]|}
                       xx3_of_jsobject
                       jsobject_of_xx3
 
-(*
 type simple_tuple = int * string * int [@@deriving jsobject]
 let () = should_parse "simple tuple" "[1,\"Some\",42]"
                       simple_tuple_of_jsobject
@@ -135,6 +134,7 @@ let () = should_parse "simple enum"
                       simple_enum_of_jsobject
                       jsobject_of_simple_enum
 
+(*
 type variant_rename = Gt [@name "$gt"]
                     | Lt of string [@name "$lt"]
                     | Eq of simple_tuple [@name "$eq"] [@@deriving jsobject]

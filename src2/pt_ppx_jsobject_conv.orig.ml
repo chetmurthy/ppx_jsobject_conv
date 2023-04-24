@@ -735,6 +735,14 @@ module Jsobject_of_expander_2 = struct
       | {%core_type.noattr.loc| string |} ->
          [{%case| v -> jsobject_of_string v |}]
 
+      | {%core_type.noattr.loc| $lid:tname$ |} ->
+         let fname = name_of_tdname tname in
+         [{%case| v -> $lid:fname$ v |}]
+
+      | {%core_type.noattr.loc| $longid:li$ . $lid:tname$ |} ->
+         let fname = name_of_tdname tname in
+         [{%case| v -> $longid:li$ . $lid:fname$ v |}]
+
       | {%core_type.noattr.loc| $list:tyl$ $lid:tname$ |} ->
          let fname = name_of_tdname tname in
          let params = List.map (core_type_to_jsobject_of_fun loc rho) tyl in
@@ -1515,6 +1523,14 @@ module Of_jsobject_expander_2 = struct
 
       | {%core_type.noattr.loc| string |} ->
          {%expression|string_of_jsobject|}
+
+      | {%core_type.noattr.loc| $lid:tname$ |} ->
+         let fname = name_of_tdname tname in
+         {%expression| $lid:fname$ |}
+
+      | {%core_type.noattr.loc| $longid:li$ . $lid:tname$ |} ->
+         let fname = name_of_tdname tname in
+         {%expression| $longid:li$ . $lid:fname$ |}
 
       | {%core_type.noattr.loc| $list:tyl$ $lid:tname$ |} ->
          let fname = name_of_tdname tname in
