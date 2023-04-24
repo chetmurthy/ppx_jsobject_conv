@@ -1474,16 +1474,35 @@ module Of_jsobject_expander_2 = struct
            [{%signature_item| val $lid:func_name$ : $fun_type$ |}])
 
   [@@@ocaml.warning "-39-27"]
-  let rec core_type_to_of_jsobject rho ty =
+  let rec core_type_to_of_jsobject ?offset ?wrap_body rho ty =
     match ty with
+        {%core_type.noattr.loc| ' $lid:v$ |} ->
+        let f = match List.assoc v rho with
+            exception Not_found ->
+             failwith Fmt.(str "core_type_to_jsobject_of: unknown type-var %a" Std_derivers.pp_core_type ty)
+          | x -> x in
+         f
+
       | {%core_type.noattr.loc| int |} ->
-         [{%case| v -> int_of_jsobject v |}]
+         {%expression|int_of_jsobject|}
 
       | {%core_type.noattr.loc| bool |} ->
-         [{%case| v -> bool_of_jsobject v |}]
+         {%expression|bool_of_jsobject|}
 
       | {%core_type.noattr.loc| string |} ->
-         [{%case| v -> string_of_jsobject v |}]
+         {%expression|string_of_jsobject|}
+
+      | {%core_type.noattr.loc| $list:tyl$ $lid:tname$ |} ->
+         let fname = name_of_tdname tname in
+         let params = List.map (core_type_to_of_jsobject rho) tyl in
+         let params = List.map (fun e -> (Asttypes.Nolabel,e)) params in
+         {%expression| ($lid:fname$ $list:params$) |}
+
+      | {%core_type.noattr.loc| $list:tyl$ $longid:li$ . $lid:tname$ |} ->
+         let fname = name_of_tdname tname in
+         let params = List.map (core_type_to_of_jsobject rho) tyl in
+         let params = List.map (fun e -> (Asttypes.Nolabel,e)) params in
+         {%expression| ( $longid:li$ . $lid:fname$ $list:params$ ) |}
 
       | {%core_type.noattr.loc| $tuplelist:tyl$ |} ->
          let len = List.length tyl in
@@ -1491,13 +1510,15 @@ module Of_jsobject_expander_2 = struct
            let var = Printf.sprintf "v_%d" i in
            let patt = {%pattern| $lid:var$ |} in
            let expr = {%expression| $lid:var$ |} in
-           let conv =
-             let cases = core_type_to_of_jsobject rho ty in
-             {%expression| function $list:cases$ |} in
-           (string_of_int i, var,patt,expr,conv) in
+           let conv = core_type_to_of_jsobject rho ty in
+           let offset_plus_i = match offset with None -> i | Some j -> i+j in
+           (string_of_int offset_plus_i, var,patt,expr,conv) in
          let ind_var_patt_expr_conv_list = List.mapi convert1 tyl in
          let exprs = ind_var_patt_expr_conv_list |> List.map (fun (_,_,_,e,_) -> e) in
-         let rhs = {%expression| Ok ( $tuplelist:exprs$ ) |} in
+         let rhs = match wrap_body with
+             None -> {%expression| Ok ( $tuplelist:exprs$ ) |}
+           | Some cid -> {%expression| Ok ( $uid:cid$ ( $tuplelist:exprs$ ) ) |}
+         in
          let rhs =
            List.fold_right (fun (i,v,p,e,conv) rhs ->
                {%expression|
@@ -1506,9 +1527,10 @@ module Of_jsobject_expander_2 = struct
                 >>= (fun $lid:v$ -> $rhs$) |})
              ind_var_patt_expr_conv_list rhs
          in
-         [{%case| v ->
-           (is_array_of_size_n v $int:string_of_int len$) >>=
-             (fun arr -> $rhs$) |}]
+         let offset_plus_len = match offset with None -> len | Some j -> len+j in
+         {%expression| fun v ->
+           (is_array_of_size_n v $int:string_of_int offset_plus_len$) >>=
+             (fun arr -> $rhs$) |}
 
       | ct ->
          failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Std_derivers.pp_core_type ct)
@@ -1520,8 +1542,49 @@ module Of_jsobject_expander_2 = struct
      let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
                           let fname = Printf.sprintf "_of_%s" v in
                           (v, {%expression| $lid:fname$ |})) in
-     let cases = core_type_to_of_jsobject rho ty in
+     let rhs = core_type_to_of_jsobject rho ty in
+     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+                   let fname = Printf.sprintf "_of_%s" v in
+                   {%expression| fun $lid:fname$ -> $rhs$ |})
+                 pl rhs in
+     [{%value_binding| $lid:fname$ = $rhs$ |}]
+
+
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
+     let fname = name_of_tdname tname in
+     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+                          let fname = Printf.sprintf "_of_%s" v in
+                          (v, {%expression| $lid:fname$ |})) in
+     let cases =
+       cl
+       |> List.map (function
+                {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+                 let rhs = core_type_to_of_jsobject ~offset:1 ~wrap_body:cid rho ty in
+                 let rhs = {%expression|
+                            (((array_get_ind arr 1) >>= $rhs$) >*=
+                            (fun emsg -> concat_error_messages "1" emsg))
+                            >>= (fun v0 -> Ok ($uid:cid$ v0))
+                  |} in
+                 (cid, rhs)
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
+                 (cid, core_type_to_of_jsobject ~offset:1 ~wrap_body:cid rho {%core_type| $tuplelist:tyl$ |}))
+       |> List.map (fun (cid, rhs) ->
+              {%case| $string:cid$ -> $rhs$ |}
+            ) in
+     let cases = cases @ [
+           let cids =
+             cl
+             |> List.map (function {%constructor_declaration.noattr| $uid:cid$ of $list:_l$ |} -> cid) in
+           let msg = Fmt.(str "0: expected one of the %a, got " (list ~sep:(const string  "/") string) cids) in
+           {%case| unknown -> Error ($string:msg$ ^ unknown) |}
+         ]
+     in
      let rhs = {%expression| function $list:cases$ |} in
+     let rhs = {%expression|
+                fun v -> (is_array v) >>=
+                  (fun arr ->
+                    ((array_get_ind arr 0) >>= string_of_jsobject) >>= $rhs$ ) |} in
+
      let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
                    let fname = Printf.sprintf "_of_%s" v in
                    {%expression| fun $lid:fname$ -> $rhs$ |})

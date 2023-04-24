@@ -78,7 +78,6 @@ type xx1b = int * bool * string [@@deriving jsobject]
 let () = should_parse "simple tuple" {|[1,true,"foo"]|}
                       xx1b_of_jsobject
                       jsobject_of_xx1b
-(*
 
 type ('a, 'b) choice = Left of 'a | Right of 'b [@@deriving jsobject]
 type xx4 = (int, string) choice [@@deriving jsobject]
@@ -89,6 +88,7 @@ let () = should_parse "xx4 right" {|["Right","foo"]|}
                       xx4_of_jsobject
                       jsobject_of_xx4
 
+(*
 type xx2 = Foo1 of int | Foo2 of bool | Foo3 of bool * int [@@deriving jsobject]
 let () = should_parse "xx2 Foo1" {|["Foo1",1]|}
                       xx2_of_jsobject
