@@ -1550,7 +1550,7 @@ module Of_jsobject_expander_2 = struct
      [{%value_binding| $lid:fname$ = $rhs$ |}]
 
 
-  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} when Attrs.define_sum_type_as cl = `Regular ->
      let fname = name_of_tdname tname in
      let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
                           let fname = Printf.sprintf "_of_%s" v in
