@@ -821,6 +821,28 @@ module Jsobject_of_expander_2 = struct
                  pl rhs in
      [{%value_binding| $lid:fname$ = $rhs$ |}]
 
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} when Attrs.define_sum_type_as cl = `AsTagless ->
+     let fname = name_of_tdname tname in
+     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+                          let fname = Printf.sprintf "_of_%s" v in
+                          (v, {%expression| $lid:fname$ |})) in
+     let cases =
+       cl
+       |> List.concat_map (function
+                {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+                 failwith Fmt.(str "core_type_to_jsobject_of: cannot tagless-ly marshal nullary constructor: %s" cid)
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+                 core_type_to_jsobject_of ~prepend_pattern:cid rho ty
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
+                 core_type_to_jsobject_of ~prepend_pattern:cid rho {%core_type| $tuplelist:tyl$ |})
+     in
+     let rhs = {%expression| function $list:cases$ |} in
+     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+                   let fname = Printf.sprintf "_of_%s" v in
+                   {%expression| fun $lid:fname$ -> $rhs$ |})
+                 pl rhs in
+     [{%value_binding| $lid:fname$ = $rhs$ |}]
+
 (*
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |} -> (loc, pl, tname)
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} -> (loc, pl, tname)
@@ -1591,6 +1613,44 @@ module Of_jsobject_expander_2 = struct
                 fun v -> (is_array v) >>=
                   (fun arr ->
                     ((array_get_ind arr 0) >>= string_of_jsobject) >>= $rhs$ ) |} in
+
+     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+                   let fname = Printf.sprintf "_of_%s" v in
+                   {%expression| fun $lid:fname$ -> $rhs$ |})
+                 pl rhs in
+     [{%value_binding| $lid:fname$ = $rhs$ |}]
+
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} when Attrs.define_sum_type_as cl = `AsTagless ->
+     let fname = name_of_tdname tname in
+     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+                          let fname = Printf.sprintf "_of_%s" v in
+                          (v, {%expression| $lid:fname$ |})) in
+     let cases =
+       cl
+       |> List.map (function
+                {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+                 failwith Fmt.(str "core_type_to_jsobject_of: cannot tagless-ly demarshal nullary constructor: %s" cid)
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+                 let rhs = core_type_to_of_jsobject rho ty in
+                 (cid, rhs)
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
+                 failwith Fmt.(str "core_type_to_jsobject_of: can only tagless-ly demarshal single-argument constructor: %s" cid)
+            ) in
+     let fallthru = {%expression| Error emsg |} in
+     let rhs = List.fold_right (fun (cid, demarsh) rhs ->
+                   {%expression|
+                    ($demarsh$ v)
+                    |> (function
+                        | Ok v1 -> Ok ($uid:cid$ v1)
+                        | Error msg1 ->
+                           let emsg = emsg ^ "("^msg1^"); " in
+                           $rhs$)
+                    |})
+                 cases fallthru in
+     let rhs = {%expression|
+                fun v ->
+                let emsg = "_: neither of possible tagless conversions applicable, possible errors: " in
+                $rhs$ |} in
 
      let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
                    let fname = Printf.sprintf "_of_%s" v in

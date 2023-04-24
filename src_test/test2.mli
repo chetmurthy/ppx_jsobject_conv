@@ -7,8 +7,8 @@ type xx4 = (int, string) choice [@@deriving jsobject]
 type xx4b = (int, (string * bool)) choice [@@deriving jsobject]
 
 type xx2 = Foo0 | Foo1 of int | Foo2 of bool | Foo3 of bool * int | Foo4 of (bool * int) [@@deriving jsobject]
-(*
 type xx3 = Bar1 of int | Bar2 of bool | Bar3 of (bool * int) [@jsobject.sum_type_as "tagless"] [@@deriving jsobject]
+(*
 type simple_tuple = int * string * int [@@deriving jsobject]
 type simple_enum = Af | Bf of string | Cf of int * string * int [@@deriving jsobject]
 type variant_rename = Gt [@name "$gt"]
