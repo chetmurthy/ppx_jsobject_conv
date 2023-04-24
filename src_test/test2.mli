@@ -10,12 +10,12 @@ type xx2 = Foo0 | Foo1 of int | Foo2 of bool | Foo3 of bool * int | Foo4 of (boo
 type xx3 = Bar1 of int | Bar2 of bool | Bar3 of (bool * int) [@jsobject.sum_type_as "tagless"] [@@deriving jsobject]
 type simple_tuple = int * string * int [@@deriving jsobject]
 type simple_enum = Af | Bf of string | Cf of int * string * int [@@deriving jsobject]
-(*
 type variant_rename = Gt [@name "$gt"]
                     | Lt of string [@name "$lt"]
                     | Eq of simple_tuple [@name "$eq"] [@@deriving jsobject]
 type inline_tuple = D of (int * string)
                     | E of (string * int) [@@deriving jsobject]
+(*
 type field_rename = {
     field_name: string [@key "FieldName"]
   } [@@deriving jsobject]

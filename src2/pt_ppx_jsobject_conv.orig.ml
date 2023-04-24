@@ -814,13 +814,15 @@ module Jsobject_of_expander_2 = struct
                           (v, {%expression| $lid:fname$ |})) in
      let cases =
        cl
-       |> List.concat_map (function
+       |> List.concat_map (function cd ->
+              let jscid = Attrs.constructor_name cd in
+              match cd with
                 {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
-                 [{%case| $uid:cid$ -> to_js_array [jsobject_of_string $string:cid$] |}]
+                 [{%case| $uid:cid$ -> to_js_array [jsobject_of_string $string:jscid$] |}]
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
-                 core_type_to_jsobject_of ~prepend_pattern:cid ~wrap_body:cid rho ty
+                 core_type_to_jsobject_of ~prepend_pattern:cid ~wrap_body:jscid rho ty
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
-                 core_type_to_jsobject_of ~prepend_pattern:cid ~prepend_body:cid rho {%core_type| $tuplelist:tyl$ |})
+                 core_type_to_jsobject_of ~prepend_pattern:cid ~prepend_body:jscid rho {%core_type| $tuplelist:tyl$ |})
      in
      let rhs = {%expression| function $list:cases$ |} in
      let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
@@ -1597,10 +1599,12 @@ module Of_jsobject_expander_2 = struct
                           (v, {%expression| $lid:fname$ |})) in
      let cases =
        cl
-       |> List.map (function
+       |> List.map (function cd ->
+              let jscid = Attrs.constructor_name cd in
+              match cd with
                 {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
                  let rhs = {%expression| Ok $uid:cid$ |} in
-                 (cid, rhs)
+                 (jscid, rhs)
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
                  let rhs = core_type_to_of_jsobject rho ty in
                  let rhs = {%expression|
@@ -1608,11 +1612,11 @@ module Of_jsobject_expander_2 = struct
                             (fun emsg -> concat_error_messages "1" emsg))
                             >>= (fun v0 -> Ok ($uid:cid$ v0))
                   |} in
-                 (cid, rhs)
+                 (jscid, rhs)
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                  let rhs = core_type_to_of_jsobject ~offset:1 ~wrap_body:cid rho {%core_type| $tuplelist:tyl$ |} in
                  let rhs = {%expression| $rhs$ v |} in
-                 (cid, rhs))
+                 (jscid, rhs))
        |> List.map (fun (cid, rhs) ->
               {%case| $string:cid$ -> $rhs$ |}
             ) in

@@ -134,7 +134,6 @@ let () = should_parse "simple enum"
                       simple_enum_of_jsobject
                       jsobject_of_simple_enum
 
-(*
 type variant_rename = Gt [@name "$gt"]
                     | Lt of string [@name "$lt"]
                     | Eq of simple_tuple [@name "$eq"] [@@deriving jsobject]
@@ -150,6 +149,7 @@ let () = should_parse "inline tuple" "[\"D\",[42,\"something\"]]"
                       inline_tuple_of_jsobject
                       jsobject_of_inline_tuple
 
+(*
 type field_rename = {
     field_name: string [@key "FieldName"]
   } [@@deriving jsobject]
