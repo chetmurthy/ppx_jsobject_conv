@@ -676,6 +676,7 @@ module Jsobject_of_expander_2 = struct
         {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> (loc, pl, tname)
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ |} -> (loc, pl, tname)
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:_$ |} -> (loc, pl, tname)
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |} -> (loc, pl, tname)
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |} -> (loc, pl, tname)
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} -> (loc, pl, tname)
     in
@@ -792,6 +793,26 @@ module Jsobject_of_expander_2 = struct
                 | (Some _, Some _) -> assert false in
               {%case.noattr.loc| $patt$ -> $body$ |}) 
 
+  let record_type_to_jsobject_of ~loc rho ll =
+    let field_name_var_longid_patt_conv_list =
+      ll
+      |> List.map (function
+               {%label_declaration.noattr.loc| $mutable:_$ $lid:fldname$ : $fldty$ |} ->
+               let var = Printf.sprintf "v_%s" fldname in
+               let longid = OrigLocation.mkloc {%longident_t| $lid:fldname$ |} loc in
+               let patt = {%pattern| $lid:var$ |} in
+               let conv = core_type_to_jsobject_of rho fldty in
+               (fldname, var, longid, patt, conv)) in
+    let pattfields = 
+      field_name_var_longid_patt_conv_list
+      |> List.map (fun (_,_,li,p,_) -> (li,p)) in
+    let patt = {%pattern| { $list:pattfields$ } |} in
+    let jstuples =
+      field_name_var_longid_patt_conv_list
+      |> List.map (fun (fldname,var,_,_,conv) ->
+             {%expression| Some ($string:fldname$, ((function $list:conv$) $lid:var$)) |}) in
+    [{%case| $patt$ -> make_jsobject_of_some [| $list:jstuples$ |] |}]
+
   let td_to_jsobject_of = function
     {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $ty$ |} ->
@@ -853,10 +874,20 @@ module Jsobject_of_expander_2 = struct
                  pl rhs in
      [{%value_binding| $lid:fname$ = $rhs$ |}]
 
-(*
-  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |} -> (loc, pl, tname)
-  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} -> (loc, pl, tname)
- *)
+
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:ll$ } |} ->
+     let fname = name_of_tdname tname in
+     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+                          let fname = Printf.sprintf "_of_%s" v in
+                          (v, {%expression| $lid:fname$ |})) in
+     let cases = record_type_to_jsobject_of ~loc rho ll in
+     let rhs = {%expression| function $list:cases$ |} in
+     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+                   let fname = Printf.sprintf "_of_%s" v in
+                   {%expression| fun $lid:fname$ -> $rhs$ |})
+                 pl rhs in
+     [{%value_binding| $lid:fname$ = $rhs$ |}]
+     
 
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
     let rec_flag = really_recursive rec_flag tds in
@@ -1491,6 +1522,7 @@ module Of_jsobject_expander_2 = struct
         {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> (loc, pl, tname)
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ |} -> (loc, pl, tname)
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:_$ |} -> (loc, pl, tname)
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |} -> (loc, pl, tname)
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |} -> (loc, pl, tname)
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} -> (loc, pl, tname)
     in
@@ -1576,6 +1608,30 @@ module Of_jsobject_expander_2 = struct
 
       | ct ->
          failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Std_derivers.pp_core_type ct)
+
+  let record_type_to_of_jsobject ~loc rho ll =
+    let field_name_var_longid_expr_conv_list =
+      ll
+      |> List.map (function
+               {%label_declaration.noattr.loc| $mutable:_$ $lid:fldname$ : $fldty$ |} ->
+               let var = Printf.sprintf "v_%s" fldname in
+               let longid = OrigLocation.mkloc {%longident_t| $lid:fldname$ |} loc in
+               let expr = {%expression| $lid:var$ |} in
+               let conv = core_type_to_of_jsobject rho fldty in
+               (fldname, var, longid, expr, conv)) in
+    let exprfields = 
+      field_name_var_longid_expr_conv_list
+      |> List.map (fun (_,_,li,e,_) -> (li,e)) in
+    let rhs = {%expression| Ok { $list:exprfields$ } |} in
+    let rhs = List.fold_right (fun (fldname,var,li,e,conv) rhs ->
+                  {%expression|
+                   (((object_get_key obj $string:fldname$) >>= $conv$) >*=
+                      (fun emsg -> concat_error_messages $string:fldname$ emsg))
+                   >>= (fun $lid:var$ -> $rhs$)
+                   |}
+                )
+                field_name_var_longid_expr_conv_list rhs in
+    {%expression| fun r -> (is_object r) >>= (fun obj -> $rhs$) |}
 
   let td_to_of_jsobject = function
     {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
@@ -1678,6 +1734,17 @@ module Of_jsobject_expander_2 = struct
                  pl rhs in
      [{%value_binding| $lid:fname$ = $rhs$ |}]
 
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:ll$ } |} ->
+     let fname = name_of_tdname tname in
+     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+                          let fname = Printf.sprintf "_of_%s" v in
+                          (v, {%expression| $lid:fname$ |})) in
+     let rhs = record_type_to_of_jsobject ~loc rho ll in
+     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+                   let fname = Printf.sprintf "_of_%s" v in
+                   {%expression| fun $lid:fname$ -> $rhs$ |})
+                 pl rhs in
+     [{%value_binding| $lid:fname$ = $rhs$ |}]
 
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
     let rec_flag = really_recursive rec_flag tds in

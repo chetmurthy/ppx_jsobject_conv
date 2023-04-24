@@ -123,6 +123,15 @@ let () = should_parse "xx3 Bar3" {|[true,1]|}
                       xx3_of_jsobject
                       jsobject_of_xx3
 
+type rec1 = { x : int } [@@deriving jsobject]
+let () = should_parse "rec1" {|{"x":1}|}
+                      rec1_of_jsobject
+                      jsobject_of_rec1
+type rec2 = { y : int ; z:string } [@@deriving jsobject]
+let () = should_parse "rec2" {|{"y":1,"z":"foo"}|}
+                      rec2_of_jsobject
+                      jsobject_of_rec2
+
 type simple_tuple = int * string * int [@@deriving jsobject]
 let () = should_parse "simple tuple" "[1,\"Some\",42]"
                       simple_tuple_of_jsobject
