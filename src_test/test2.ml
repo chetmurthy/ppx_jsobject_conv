@@ -167,7 +167,6 @@ let () = should_parse "field rename" {|{"FieldName":"something"}|}
          should_fail "field rename with raw name" {|{"field_name":"something"}|}
                      field_rename_of_jsobject
 
-(*
 type maybe_int = int option [@@deriving jsobject]
 let () = should_parse "maybe int" "32"
                       maybe_int_of_jsobject
@@ -176,6 +175,7 @@ let () = should_parse "maybe int" "32"
                       maybe_int_of_jsobject
                       jsobject_of_maybe_int
 
+(*
 type arr_float = float array [@@deriving jsobject]
 let () = should_parse "float array" "[4.2,2,5.3,1.24e+24]"
                       arr_float_of_jsobject

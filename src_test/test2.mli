@@ -20,8 +20,8 @@ type inline_tuple = D of (int * string)
 type field_rename = {
     field_name: string [@key "FieldName"]
   } [@@deriving jsobject]
-(*
 type maybe_int = int option [@@deriving jsobject]
+(*
 type arr_float = float array [@@deriving jsobject]
 type string_list = string list [@@deriving jsobject]
 type status = [`Created |
