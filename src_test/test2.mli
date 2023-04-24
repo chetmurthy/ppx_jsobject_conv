@@ -1,7 +1,7 @@
 
 type xx1 = int [@@deriving jsobject]
-(*
 type xx1b = int * bool * string [@@deriving jsobject]
+(*
 
 type ('a, 'b) choice = Left of 'a | Right of 'b [@@deriving jsobject]
 type xx4 = (int, string) choice [@@deriving jsobject]

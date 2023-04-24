@@ -1485,6 +1485,31 @@ module Of_jsobject_expander_2 = struct
       | {%core_type.noattr.loc| string |} ->
          [{%case| v -> string_of_jsobject v |}]
 
+      | {%core_type.noattr.loc| $tuplelist:tyl$ |} ->
+         let len = List.length tyl in
+         let convert1 i ty =
+           let var = Printf.sprintf "v_%d" i in
+           let patt = {%pattern| $lid:var$ |} in
+           let expr = {%expression| $lid:var$ |} in
+           let conv =
+             let cases = core_type_to_of_jsobject rho ty in
+             {%expression| function $list:cases$ |} in
+           (string_of_int i, var,patt,expr,conv) in
+         let ind_var_patt_expr_conv_list = List.mapi convert1 tyl in
+         let exprs = ind_var_patt_expr_conv_list |> List.map (fun (_,_,_,e,_) -> e) in
+         let rhs = {%expression| Ok ( $tuplelist:exprs$ ) |} in
+         let rhs =
+           List.fold_right (fun (i,v,p,e,conv) rhs ->
+               {%expression|
+                (((array_get_ind arr $int:i$) >>= $conv$)
+                 >*= (fun emsg -> concat_error_messages $string:i$ emsg))
+                >>= (fun $lid:v$ -> $rhs$) |})
+             ind_var_patt_expr_conv_list rhs
+         in
+         [{%case| v ->
+           (is_array_of_size_n v $int:string_of_int len$) >>=
+             (fun arr -> $rhs$) |}]
+
       | ct ->
          failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Std_derivers.pp_core_type ct)
 
