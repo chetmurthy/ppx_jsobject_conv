@@ -158,7 +158,6 @@ let () = should_parse "inline tuple" "[\"D\",[42,\"something\"]]"
                       inline_tuple_of_jsobject
                       jsobject_of_inline_tuple
 
-(*
 type field_rename = {
     field_name: string [@key "FieldName"]
   } [@@deriving jsobject]
@@ -168,6 +167,7 @@ let () = should_parse "field rename" {|{"FieldName":"something"}|}
          should_fail "field rename with raw name" {|{"field_name":"something"}|}
                      field_rename_of_jsobject
 
+(*
 type maybe_int = int option [@@deriving jsobject]
 let () = should_parse "maybe int" "32"
                       maybe_int_of_jsobject

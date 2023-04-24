@@ -797,20 +797,21 @@ module Jsobject_of_expander_2 = struct
     let field_name_var_longid_patt_conv_list =
       ll
       |> List.map (function
-               {%label_declaration.noattr.loc| $mutable:_$ $lid:fldname$ : $fldty$ |} ->
+               {%label_declaration.noattr.loc| $mutable:_$ $lid:fldname$ : $fldty$ |} as ld ->
                let var = Printf.sprintf "v_%s" fldname in
                let longid = OrigLocation.mkloc {%longident_t| $lid:fldname$ |} loc in
                let patt = {%pattern| $lid:var$ |} in
                let conv = core_type_to_jsobject_of rho fldty in
-               (fldname, var, longid, patt, conv)) in
+               let jsfldname = Attrs.field_name ld in
+               (jsfldname, var, longid, patt, conv)) in
     let pattfields = 
       field_name_var_longid_patt_conv_list
       |> List.map (fun (_,_,li,p,_) -> (li,p)) in
     let patt = {%pattern| { $list:pattfields$ } |} in
     let jstuples =
       field_name_var_longid_patt_conv_list
-      |> List.map (fun (fldname,var,_,_,conv) ->
-             {%expression| Some ($string:fldname$, ((function $list:conv$) $lid:var$)) |}) in
+      |> List.map (fun (jsfldname,var,_,_,conv) ->
+             {%expression| Some ($string:jsfldname$, ((function $list:conv$) $lid:var$)) |}) in
     [{%case| $patt$ -> make_jsobject_of_some [| $list:jstuples$ |] |}]
 
   let td_to_jsobject_of = function
@@ -1610,27 +1611,28 @@ module Of_jsobject_expander_2 = struct
          failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Std_derivers.pp_core_type ct)
 
   let record_type_to_of_jsobject ~loc rho ll =
-    let field_name_var_longid_expr_conv_list =
+    let field_name_jsfldname_var_longid_expr_conv_list =
       ll
       |> List.map (function
-               {%label_declaration.noattr.loc| $mutable:_$ $lid:fldname$ : $fldty$ |} ->
+               {%label_declaration.noattr.loc| $mutable:_$ $lid:fldname$ : $fldty$ |} as ld ->
                let var = Printf.sprintf "v_%s" fldname in
                let longid = OrigLocation.mkloc {%longident_t| $lid:fldname$ |} loc in
                let expr = {%expression| $lid:var$ |} in
                let conv = core_type_to_of_jsobject rho fldty in
-               (fldname, var, longid, expr, conv)) in
+               let jsfldname = Attrs.field_name ld in
+               (fldname, jsfldname, var, longid, expr, conv)) in
     let exprfields = 
-      field_name_var_longid_expr_conv_list
-      |> List.map (fun (_,_,li,e,_) -> (li,e)) in
+      field_name_jsfldname_var_longid_expr_conv_list
+      |> List.map (fun (_,_,_,li,e,_) -> (li,e)) in
     let rhs = {%expression| Ok { $list:exprfields$ } |} in
-    let rhs = List.fold_right (fun (fldname,var,li,e,conv) rhs ->
+    let rhs = List.fold_right (fun (fldname,  jsfldname,var,li,e,conv) rhs ->
                   {%expression|
-                   (((object_get_key obj $string:fldname$) >>= $conv$) >*=
+                   (((object_get_key obj $string:jsfldname$) >>= $conv$) >*=
                       (fun emsg -> concat_error_messages $string:fldname$ emsg))
                    >>= (fun $lid:var$ -> $rhs$)
                    |}
                 )
-                field_name_var_longid_expr_conv_list rhs in
+                field_name_jsfldname_var_longid_expr_conv_list rhs in
     {%expression| fun r -> (is_object r) >>= (fun obj -> $rhs$) |}
 
   let td_to_of_jsobject = function
