@@ -4,7 +4,9 @@ type xx1b = int * bool * string [@@deriving jsobject]
 
 type ('a, 'b) choice = Left of 'a | Right of 'b [@@deriving jsobject]
 type xx4 = (int, string) choice [@@deriving jsobject]
-type xx2 = Foo1 of int | Foo2 of bool | Foo3 of bool * int [@@deriving jsobject]
+type xx4b = (int, (string * bool)) choice [@@deriving jsobject]
+
+type xx2 = Foo1 of int | Foo2 of bool | Foo3 of bool * int | Foo4 of (bool * int) [@@deriving jsobject]
 (*
 type xx3 = Bar1 of int | Bar2 of bool | Bar3 of (bool * int) [@jsobject.sum_type_as "tagless"] [@@deriving jsobject]
 type simple_tuple = int * string * int [@@deriving jsobject]

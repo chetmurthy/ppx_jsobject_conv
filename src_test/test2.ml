@@ -87,8 +87,15 @@ let () = should_parse "xx4 left" {|["Left",4]|}
 let () = should_parse "xx4 right" {|["Right","foo"]|}
                       xx4_of_jsobject
                       jsobject_of_xx4
+type xx4b = (int, (string * bool)) choice [@@deriving jsobject]
+let () = should_parse "xx4b left" {|["Left",4]|}
+                      xx4b_of_jsobject
+                      jsobject_of_xx4b
+let () = should_parse "xx4b right" {|["Right",["foo",true]]|}
+                      xx4b_of_jsobject
+                      jsobject_of_xx4b
 
-type xx2 = Foo1 of int | Foo2 of bool | Foo3 of bool * int [@@deriving jsobject]
+type xx2 = Foo1 of int | Foo2 of bool | Foo3 of bool * int | Foo4 of (bool * int) [@@deriving jsobject]
 let () = should_parse "xx2 Foo1" {|["Foo1",1]|}
                       xx2_of_jsobject
                       jsobject_of_xx2
@@ -98,9 +105,21 @@ let () = should_parse "xx2 Foo2" {|["Foo2",true]|}
 let () = should_parse "xx2 Foo3" {|["Foo3",true,1]|}
                       xx2_of_jsobject
                       jsobject_of_xx2
+let () = should_parse "xx2 Foo4" {|["Foo4",[true,1]]|}
+                      xx2_of_jsobject
+                      jsobject_of_xx2
 
 (*
 type xx3 = Bar1 of int | Bar2 of bool | Bar3 of (bool * int) [@jsobject.sum_type_as "tagless"] [@@deriving jsobject]
+let () = should_parse "xx2 Bar1" {|["Bar1",1]|}
+                      xx3_of_jsobject
+                      jsobject_of_xx3
+let () = should_parse "xx3 Bar2" {|["Bar2",true]|}
+                      xx3_of_jsobject
+                      jsobject_of_xx3
+let () = should_parse "xx3 Bar3" {|["Bar3",[true,1]]|}
+                      xx3_of_jsobject
+                      jsobject_of_xx3
 
 type simple_tuple = int * string * int [@@deriving jsobject]
 let () = should_parse "simple tuple" "[1,\"Some\",42]"

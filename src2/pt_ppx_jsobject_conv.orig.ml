@@ -1559,7 +1559,7 @@ module Of_jsobject_expander_2 = struct
        cl
        |> List.map (function
                 {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
-                 let rhs = core_type_to_of_jsobject ~offset:1 ~wrap_body:cid rho ty in
+                 let rhs = core_type_to_of_jsobject rho ty in
                  let rhs = {%expression|
                             (((array_get_ind arr 1) >>= $rhs$) >*=
                             (fun emsg -> concat_error_messages "1" emsg))
