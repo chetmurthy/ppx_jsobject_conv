@@ -740,6 +740,10 @@ module Jsobject_of_expander_2 = struct
          let cases = core_type_to_jsobject_of rho ty in
          [{%case| v -> jsobject_of_array (function $list:cases$) v |}]
 
+      | {%core_type.noattr.loc| $ty$ list |} ->
+         let cases = core_type_to_jsobject_of rho ty in
+         [{%case| v -> jsobject_of_list (function $list:cases$) v |}]
+
       | {%core_type.noattr.loc| $ty$ option |} ->
          let cases = core_type_to_jsobject_of rho ty in
          [{%case| v -> jsobject_of_option (function $list:cases$) v |}]
@@ -1567,13 +1571,17 @@ module Of_jsobject_expander_2 = struct
       | {%core_type.noattr.loc| string |} ->
          {%expression|string_of_jsobject|}
 
-      | {%core_type.noattr.loc| $ty$ option |} ->
-         let conv = core_type_to_of_jsobject rho ty in
-         {%expression| option_of_jsobject $conv$ |}
-
       | {%core_type.noattr.loc| $ty$ array |} ->
          let conv = core_type_to_of_jsobject rho ty in
          {%expression| array_of_jsobject $conv$ |}
+
+      | {%core_type.noattr.loc| $ty$ list |} ->
+         let conv = core_type_to_of_jsobject rho ty in
+         {%expression| list_of_jsobject $conv$ |}
+
+      | {%core_type.noattr.loc| $ty$ option |} ->
+         let conv = core_type_to_of_jsobject rho ty in
+         {%expression| option_of_jsobject $conv$ |}
 
       | {%core_type.noattr.loc| $lid:tname$ |} ->
          let fname = name_of_tdname tname in
