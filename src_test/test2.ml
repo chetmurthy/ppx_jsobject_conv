@@ -78,9 +78,17 @@ type xx1b = int * bool * string [@@deriving jsobject]
 let () = should_parse "simple tuple" {|[1,true,"foo"]|}
                       xx1b_of_jsobject
                       jsobject_of_xx1b
+
+type ('a, 'b) choice = Left of 'a | Right of 'b [@@deriving jsobject]
+type xx4 = (int, string) choice [@@deriving jsobject]
+let () = should_parse "xx4 left" {|["Left",4]|}
+                      xx4_of_jsobject
+                      jsobject_of_xx4
+let () = should_parse "xx4 right" {|["Right","foo"]|}
+                      xx4_of_jsobject
+                      jsobject_of_xx4
+
 (*
-type ('a, 'b) choice = Left of 'a | Right of 'b
-and xx4 = (int, string) choice [@@deriving jsobject]
 type xx2 = Foo1 of int | Foo2 of bool | Foo3 of bool * int [@@deriving jsobject]
 type xx3 = Bar1 of int | Bar2 of bool | Bar3 of (bool * int) [@jsobject.sum_type_as "tagless"] [@@deriving jsobject]
 
