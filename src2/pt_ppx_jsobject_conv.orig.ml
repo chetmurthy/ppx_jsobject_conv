@@ -1567,7 +1567,9 @@ module Of_jsobject_expander_2 = struct
                   |} in
                  (cid, rhs)
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
-                 (cid, core_type_to_of_jsobject ~offset:1 ~wrap_body:cid rho {%core_type| $tuplelist:tyl$ |}))
+                 let rhs = core_type_to_of_jsobject ~offset:1 ~wrap_body:cid rho {%core_type| $tuplelist:tyl$ |} in
+                 let rhs = {%expression| $rhs$ v |} in
+                 (cid, rhs))
        |> List.map (fun (cid, rhs) ->
               {%case| $string:cid$ -> $rhs$ |}
             ) in
