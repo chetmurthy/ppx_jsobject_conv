@@ -175,12 +175,12 @@ let () = should_parse "maybe int" "32"
                       maybe_int_of_jsobject
                       jsobject_of_maybe_int
 
-(*
 type arr_float = float array [@@deriving jsobject]
 let () = should_parse "float array" "[4.2,2,5.3,1.24e+24]"
                       arr_float_of_jsobject
                       jsobject_of_arr_float
 
+(*
 type string_list = string list [@@deriving jsobject]
 let () = should_parse "string list" {|["some","quick","по-русски"]|}
                       string_list_of_jsobject
