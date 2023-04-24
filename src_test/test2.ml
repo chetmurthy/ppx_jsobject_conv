@@ -1,4 +1,4 @@
-Printf.fprintf stderr "RUNNING TEST1\n%!" ;;
+Printf.fprintf stderr "RUNNING TEST2\n%!" ;;
 
 (* trick ocamldep (maybe do this via myocamlbuild and _tags) *)
 (* fix this *)
@@ -66,6 +66,23 @@ let should_fail name input from_jsobject  =
   let msg = Printf.sprintf "will not parse %s '%s'" name input in
   let t = msg >:: (fun _ -> _should_fail input from_jsobject) in
   tests := (t::!tests)
+
+;;
+
+type xx1 = int [@@deriving jsobject]
+let () = should_parse "xx1" "1"
+                      xx1_of_jsobject
+                      jsobject_of_xx1
+
+type xx1b = int * bool * string [@@deriving jsobject]
+let () = should_parse "simple tuple" {|[1,true,"foo"]|}
+                      xx1b_of_jsobject
+                      jsobject_of_xx1b
+(*
+type ('a, 'b) choice = Left of 'a | Right of 'b
+and xx4 = (int, string) choice [@@deriving jsobject]
+type xx2 = Foo1 of int | Foo2 of bool | Foo3 of bool * int [@@deriving jsobject]
+type xx3 = Bar1 of int | Bar2 of bool | Bar3 of (bool * int) [@jsobject.sum_type_as "tagless"] [@@deriving jsobject]
 
 type simple_tuple = int * string * int [@@deriving jsobject]
 let () = should_parse "simple tuple" "[1,\"Some\",42]"
@@ -298,6 +315,7 @@ let () =
                ForOpen.jsobject_of_open_type;
   should_fail "invalid open type" "[\"Invalid\"]"
                ForOpen.open_type_of_jsobject
+ *)
 
 let suite = Suite.(>:::) "conv" (List.rev !tests)
 

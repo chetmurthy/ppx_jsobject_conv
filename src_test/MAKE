@@ -1,0 +1,9 @@
+#!/bin/bash -x
+
+#ocamlfind ocamlc -package ppx_jsobject_conv -package js_of_ocaml,js_of_ocaml-ppx,webtest,webtest-js -linkpkg test.ml  -o test.exe
+#js_of_ocaml test.exe
+#node test.js
+
+#ocamlfind ocamlc -dsource -package ppx_jsobject_conv -package js_of_ocaml,js_of_ocaml-ppx,webtest,webtest-js -linkpkg test.ml
+ocamlfind ocamlc -dsource -package ppx_jsobject_conv -package js_of_ocaml,js_of_ocaml-ppx,webtest,webtest-js -linkpkg test2.ml
+ocamlfind ocamlc -dsource -package ppx_jsobject_conv -package js_of_ocaml,js_of_ocaml-ppx,webtest,webtest-js -linkpkg test2.mli

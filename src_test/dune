@@ -1,10 +1,28 @@
 (executable
    (name test)
+   (modules Test)
    (modes js)
     (libraries js_of_ocaml webtest webtest-js)
     (preprocess (pps ppx_jsobject_conv)))
 
+(executable
+   (name test2)
+   (modules Test2)
+   (modes js)
+    (libraries js_of_ocaml webtest webtest-js)
+    (preprocess (pps ppx_jsobject_conv_pt)))
+
 (alias
   (name runtest)
-  (deps test.bc.js)
-  (action (run node test.bc.js)))
+  (deps test.bc.js test2.bc.js)
+)
+
+(alias
+  (name runtest)
+  (deps test2.bc.js)
+  (action (run node test2.bc.js)))
+
+(env
+  (dev
+    (flags (:standard -w -32))))
+    

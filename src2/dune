@@ -1,0 +1,18 @@
+(library
+  (name ppx_jsobject_conv_pt)
+  (public_name ppx_jsobject_conv.pt)
+  (kind ppx_deriver)
+  (ppx_runtime_libraries ppx_jsobject_conv.runtime)
+  (flags :standard -safe-string)
+  (libraries ppxlib pa_ppx_parsetree.helpers fmt)
+  (preprocess (pps ppxlib.metaquot)))
+
+(rule
+ (target pt_ppx_jsobject_conv.ml)
+ (deps
+   (:src pt_ppx_jsobject_conv.orig.ml)
+   )
+ (action
+ (with-stdout-to %{target}
+  (run not-ocamlfind preprocess -package fmt,unix,camlp5,ounit2,pa_ppx.utils,pa_ppx_parsetree.helpers,camlp5.pr_o -package pa_ppx.deriving_plugins.std,pa_ppx_parsetree.quotations,pa_ppx_quotation2extension -syntax camlp5o  %{src})
+  )))
