@@ -1434,10 +1434,93 @@ module Of_jsobject_expander = struct
 
 end
 
+module Of_jsobject_expander_2 = struct
+  open Stdlib
+  open Parsetree
+  [@@@ocaml.warning "-8"]
+
+  let name_of_tdname name = match name with
+    | "t" -> "of_jsobject"
+    | tn  -> tn ^ "_of_jsobject"
+
+  let name_of_td td = name_of_tdname td.ptype_name.txt
+  let name_of_te te = name_of_tdname @@ Longident.last_exn te.ptyext_path.txt
+
+  let converter_type ty : core_type =
+    let loc = match ty with {%core_type.noattr.loc| $_$ |} -> loc in
+    {%core_type| Js_of_ocaml.Js.Unsafe.any Js_of_ocaml.Js.t -> ($ty$, string) result |}
+
+
+  let td_to_fun_type td =
+    let (loc,  pl, tname) =
+      match td with
+        {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> (loc, pl, tname)
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ |} -> (loc, pl, tname)
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:_$ |} -> (loc, pl, tname)
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |} -> (loc, pl, tname)
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} -> (loc, pl, tname)
+    in
+    let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
+    List.fold_right (fun (pv, _) rhs_t ->
+        {%core_type| $converter_type pv$ -> $rhs_t$ |})
+      pl rhs_t
+
+  let sig_type_decl ~loc:_ ~path:_ (_rf, tds) =
+    tds
+    |> List.concat_map (fun td ->
+           let fun_type = td_to_fun_type td in
+           let func_name = name_of_td td in
+           let loc = td.ptype_loc in
+           [{%signature_item| val $lid:func_name$ : $fun_type$ |}])
+
+  [@@@ocaml.warning "-39-27"]
+  let rec core_type_to_of_jsobject rho ty =
+    match ty with
+      | {%core_type.noattr.loc| int |} ->
+         [{%case| v -> int_of_jsobject v |}]
+
+      | {%core_type.noattr.loc| bool |} ->
+         [{%case| v -> bool_of_jsobject v |}]
+
+      | {%core_type.noattr.loc| string |} ->
+         [{%case| v -> string_of_jsobject v |}]
+
+      | ct ->
+         failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Std_derivers.pp_core_type ct)
+
+  let td_to_of_jsobject = function
+    {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $ty$ |} ->
+     let fname = name_of_tdname tname in
+     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+                          let fname = Printf.sprintf "_of_%s" v in
+                          (v, {%expression| $lid:fname$ |})) in
+     let cases = core_type_to_of_jsobject rho ty in
+     let rhs = {%expression| function $list:cases$ |} in
+     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+                   let fname = Printf.sprintf "_of_%s" v in
+                   {%expression| fun $lid:fname$ -> $rhs$ |})
+                 pl rhs in
+     [{%value_binding| $lid:fname$ = $rhs$ |}]
+
+
+  let str_type_decl ~loc ~path:_ (rec_flag, tds) =
+    let rec_flag = really_recursive rec_flag tds in
+    let bindings = tds |> List.concat_map td_to_of_jsobject in
+    let bindings =
+      bindings
+      |> List.map (fun
+               {%value_binding.noattr.loc| $lid:fname$ = $e$ |} ->
+             let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
+             {%value_binding.noattr.loc| $lid:fname$ = $e$ |}) in
+    [{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
+
+end
+
 module Of_jsobject = struct
   let str_type_decl =
     Ppxlib.Deriving.Generator.make_noarg
-      Of_jsobject_expander.str_type_decl
+      Of_jsobject_expander_2.str_type_decl
       ~attributes:[Attribute.T Attrs.name;
                    Attribute.T Attrs.key;
                    Attribute.T Attrs.sum_type_as;
@@ -1446,7 +1529,7 @@ module Of_jsobject = struct
                   ]
 
   let sig_type_decl =
-    Ppxlib.Deriving.Generator.make_noarg Of_jsobject_expander.sig_type_decl
+    Ppxlib.Deriving.Generator.make_noarg Of_jsobject_expander_2.sig_type_decl
 
   let str_type_ext =
     Ppxlib.Deriving.Generator.make_noarg Of_jsobject_expander.str_type_ext

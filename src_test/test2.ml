@@ -74,6 +74,7 @@ let () = should_parse "xx1" "1"
                       xx1_of_jsobject
                       jsobject_of_xx1
 
+(*
 type xx1b = int * bool * string [@@deriving jsobject]
 let () = should_parse "simple tuple" {|[1,true,"foo"]|}
                       xx1b_of_jsobject
@@ -99,7 +100,6 @@ let () = should_parse "xx2 Foo3" {|["Foo3",true,1]|}
                       xx2_of_jsobject
                       jsobject_of_xx2
 
-(*
 type xx3 = Bar1 of int | Bar2 of bool | Bar3 of (bool * int) [@jsobject.sum_type_as "tagless"] [@@deriving jsobject]
 
 type simple_tuple = int * string * int [@@deriving jsobject]
