@@ -335,6 +335,9 @@ let () =
                parametrized_of_jsobject
                jsobject_of_parametrized
 
+type rec3 = A of int * bool
+          | B of { x : int * bool } [@@deriving jsobject]
+
 (*
 type tagless =  U2 of {inlinef: float; inlines: string}
               | U1 of user [@jsobject.sum_type_as "tagless"]

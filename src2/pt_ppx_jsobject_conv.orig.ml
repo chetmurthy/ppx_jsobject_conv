@@ -824,7 +824,7 @@ module Jsobject_of_expander_2 = struct
               let body = modify_body body in
               {%case.noattr.loc| $patt$ -> $body$ |}) 
 
-  and record_type_to_jsobject_of ~loc rho ll =
+  and record_type_to_jsobject_of ?(modify_pattern = (fun x -> x)) ~loc rho ll =
     let field_name_var_longid_patt_conv_list =
       ll
       |> List.map (function
@@ -839,6 +839,7 @@ module Jsobject_of_expander_2 = struct
       field_name_var_longid_patt_conv_list
       |> List.map (fun (_,_,li,p,_) -> (li,p)) in
     let patt = {%pattern| { $list:pattfields$ } |} in
+    let patt = modify_pattern patt in
     let jstuples =
       field_name_var_longid_patt_conv_list
       |> List.map (fun (jsfldname,var,_,_,conv) ->
@@ -863,6 +864,12 @@ module Jsobject_of_expander_2 = struct
                  core_type_to_jsobject_of
                    ~modify_pattern:(modify_pattern ~polyvariant ~loc cid)
                    ~modify_body:(do_wrap_body jscid) rho ty
+
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of { $list:ll$ } |} ->
+                 (match record_type_to_jsobject_of ~loc ~modify_pattern:(modify_pattern ~polyvariant:false ~loc cid) rho ll with
+                    [{%case| $patt$ -> $expr$ |}] ->
+                     [{%case| $patt$ ->  let v = $expr$ in to_js_array [jsobject_of_string $string:jscid$; v] |}]
+                 )
 
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                  core_type_to_jsobject_of
@@ -1708,7 +1715,7 @@ module Of_jsobject_expander_2 = struct
       | ct ->
          failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Std_derivers.pp_core_type ct)
 
-  and record_type_to_of_jsobject ~loc rho ll =
+  and record_type_to_of_jsobject ~loc ?(modify_body = (fun x -> x)) rho ll =
     let field_name_jsfldname_var_longid_expr_conv_list =
       ll
       |> List.map (function
@@ -1732,7 +1739,9 @@ module Of_jsobject_expander_2 = struct
     let exprfields = 
       field_name_jsfldname_var_longid_expr_conv_list
       |> List.map (fun (_,_,_,li,e,_) -> (li,e)) in
-    let rhs = {%expression| Ok { $list:exprfields$ } |} in
+    let rhs = {%expression| { $list:exprfields$ } |} in
+    let rhs = modify_body rhs in
+    let rhs = {%expression| Ok $rhs$ |} in
     let rhs = List.fold_right (fun (fldname,  jsfldname,var,li,e,conv) rhs ->
                   {%expression|
                    (((object_get_key obj $string:jsfldname$) >>= $conv$) >*=
@@ -1772,6 +1781,15 @@ module Of_jsobject_expander_2 = struct
                   >>= (fun v0 -> Ok ($body$))
                   |} in
                (jscid, rhs)
+
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of { $list:ll$ } |} ->
+               let rhs = record_type_to_of_jsobject ~modify_body:(wrap_constructor ~loc cid) ~loc rho ll in
+               let rhs = {%expression|
+                  (((array_get_ind arr 1) >>= $rhs$) >*=
+                     (fun emsg -> concat_error_messages "1" emsg))
+                  |} in
+               (jscid, rhs)
+
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                let modify_body =
                  if polyvariant then
@@ -1787,7 +1805,10 @@ module Of_jsobject_expander_2 = struct
       let cases = cases @ [
             let cids =
               cl
-              |> List.map (function {%constructor_declaration.noattr| $uid:cid$ of $list:_l$ |} -> cid) in
+              |> List.map (function
+                       {%constructor_declaration.noattr| $uid:cid$ of $list:_l$ |} -> cid
+                     | {%constructor_declaration.noattr| $uid:cid$ of { $list:_l$ } |} -> cid
+                   ) in
             let msg = Fmt.(str "0: expected one of the %a, got " (list ~sep:(const string  "/") string) cids) in
             {%case| unknown -> Error ($string:msg$ ^ unknown) |}
           ]
