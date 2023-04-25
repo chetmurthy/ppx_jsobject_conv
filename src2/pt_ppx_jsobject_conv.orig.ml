@@ -884,6 +884,23 @@ module Jsobject_of_expander_2 = struct
                  ~modify_pattern:(modify_pattern ~polyvariant ~loc cid)
                  rho {%core_type| $tuplelist:tyl$ |})
 
+    else if Attrs.define_sum_type_as cl = `AsObject then
+     cl
+     |> List.map (function cd ->
+            let jscid = Attrs.constructor_name cd in
+            match cd with
+              {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+               {%case| $uid:cid$ -> make_jsobject [|($string:jscid$, to_js_array [])|] |}
+
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+               let conv_cases = core_type_to_jsobject_of rho ty in
+               let conv = {%expression| function $list:conv_cases$ |} in
+               {%case| $uid:cid$ v -> let v = $conv$ v in make_jsobject [|($string:jscid$, v)|] |}
+
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
+               failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %a" Std_derivers.pp_constructor_declaration cd)
+          )
+
     else assert false
 
   let td_to_jsobject_of = function
@@ -1793,6 +1810,59 @@ module Of_jsobject_expander_2 = struct
                  cases fallthru in
      [{%case| v -> let emsg = "_: neither of possible tagless conversions applicable, possible errors: " in
                 $rhs$ |}]
+
+    else if Attrs.define_sum_type_as cl = `AsObject then
+      let jscid_case_list =
+        cl
+        |> List.map (function cd ->
+            let jscid = Attrs.constructor_name cd in
+            match cd with
+              {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+               let rhs =
+                 if polyvariant then
+                   {%expression| Ok ( ` $id:cid$ ) |}
+                 else
+                   {%expression| Ok $uid:cid$ |} in
+               (jscid, rhs)
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+               let conv = core_type_to_of_jsobject rho ty in
+               let body =
+                 if polyvariant then
+                   {%expression| ` $id:cid$ v0 |}
+                 else
+                   {%expression| $uid:cid$ v0 |}
+               in
+               let rhs = {%expression|
+                (object_get_key obj $string:jscid$) >>=
+                  ((fun v ->
+                    (($conv$ v) >*=
+                       (fun emsg ->
+                         concat_error_messages $string:jscid$ emsg))
+                    >>= (fun v0 -> Ok $body$)))
+                |} in
+               (jscid, rhs)
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
+               failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %a" Std_derivers.pp_constructor_declaration cd)
+             ) in
+      let cases = 
+        jscid_case_list
+        |> List.map (fun (jscid, rhs) ->
+               {%case| $string:jscid$ -> $rhs$ |}
+             ) in
+      let jscids = List.map fst jscid_case_list in
+      let cases = cases @ [
+            let msg = Fmt.(str "object should contain one key of the %a, got " (list ~sep:(const string  "/") string) jscids) in
+            {%case| unknown -> Error ($string:msg$ ^ unknown) |}
+          ]
+      in
+     let rhs = {%expression| function $list:cases$ |} in
+     [{%case|
+       v ->
+       (is_object v) >>=
+         (fun obj ->
+           (object_get_sole_key obj) >>= $rhs$)
+       |}]
+
   else assert false
 
   let td_to_of_jsobject = function

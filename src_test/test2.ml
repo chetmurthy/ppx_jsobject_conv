@@ -297,7 +297,6 @@ let () = should_parse "email" "{\"email\":\"some@example.org\"}"
          should_fail "invalid email" "{\"email\":\"someexample.org\"}"
                      email_info_of_jsobject
 
-(*
 type variant_as_object = Gtn of int [@name "$gt"] [@jsobject.sum_type_as "object"]
                        | Ltn of int [@name "$lt"]  [@@deriving jsobject]
 let () = should_parse "variant as object"
@@ -309,6 +308,7 @@ let () = should_parse "variant as object"
          should_fail "invalid value" "{\"$gt\":\"something\"}"
                      variant_as_object_of_jsobject
 
+(*
 type enum = Var1 [@name "var1"] | Var2 | Var3 [@sum_type_as "enum"] [@@deriving jsobject]
 type enum_info = {enum: enum} [@@deriving jsobject]
 let () = should_parse "enum" "{\"enum\":\"var1\"}"
