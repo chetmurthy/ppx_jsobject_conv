@@ -718,7 +718,7 @@ module Jsobject_of_expander_2 = struct
     let cases = core_type_to_jsobject_of rho ty in
     {%expression| function $list:cases$ |}
 
-  and core_type_to_jsobject_of ?prepend_pattern ?wrap_body ?prepend_body rho ty : case list =
+  and core_type_to_jsobject_of ?(polyvariant=false) ?prepend_pattern ?wrap_body ?prepend_body rho ty : case list =
     let cases = match ty with
         {%core_type.noattr.loc| ' $lid:v$ |} ->
         let f = match List.assoc v rho with
@@ -768,6 +768,19 @@ module Jsobject_of_expander_2 = struct
          let params = List.map (fun e -> (Asttypes.Nolabel,e)) params in
          [{%case| v -> ( $longid:li$ . $lid:fname$ $list:params$ ) v |}]
 
+      | {%core_type.noattr.loc| [ $list:rfl$ ] |} ->
+         let cl =
+           rfl
+           |> List.map (function
+                    {%row_field| $_$ |} ->
+                     failwith Fmt.(str "jsobject_of: variant cannot include inheritance: %a" Std_derivers.pp_core_type ty)
+                  | {%row_field.noattr.loc| ` $id:cid$ of $isconst:_$ $list:tyl$ |} ->
+                     {%constructor_declaration| $uid:cid$ of $list:tyl$ |}
+                  | rf ->
+                     failwith Fmt.(str "jsobject_of: unrecognized row_field: %a" Std_derivers.pp_row_field rf)
+                ) in
+         variant_type_to_jsobject_of ~loc ~polyvariant:true rho cl
+
       | {%core_type.noattr.loc| $tuplelist:tyl$ |} ->
          let convert1 i ty =
            let var = Printf.sprintf "v_%d" i in
@@ -797,7 +810,11 @@ module Jsobject_of_expander_2 = struct
               let loc = match patt with {%pattern.noattr.loc| $_$ |} -> loc in
               let patt = match prepend_pattern with
                   None -> patt
-                | Some cid -> {%pattern| $uid:cid$ $patt$ |} in
+                | Some cid ->
+                   if polyvariant then
+                     {%pattern| ` $id:cid$ $patt$ |}
+                   else
+                     {%pattern| $uid:cid$ $patt$ |} in
               let body = match (wrap_body, prepend_body) with
                   (None, None) -> body
                 | (Some cid, None) -> do_wrap_body cid body
@@ -826,27 +843,32 @@ module Jsobject_of_expander_2 = struct
              {%expression| Some ($string:jsfldname$, ((function $list:conv$) $lid:var$)) |}) in
     [{%case| $patt$ -> make_jsobject_of_some [| $list:jstuples$ |] |}]
 
-  and variant_type_to_jsobject_of ~loc rho cl =
+  and variant_type_to_jsobject_of ~loc ?(polyvariant=false) rho cl =
     if Attrs.define_sum_type_as cl = `Regular then
        cl
        |> List.concat_map (function cd ->
               let jscid = Attrs.constructor_name cd in
               match cd with
                 {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
-                 [{%case| $uid:cid$ -> to_js_array [jsobject_of_string $string:jscid$] |}]
+                 let patt =
+                   if polyvariant then
+                     {%pattern| ` $id:cid$ |}
+                   else
+                     {%pattern| $uid:cid$ |} in
+                 [{%case| $patt$ -> to_js_array [jsobject_of_string $string:jscid$] |}]
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
-                 core_type_to_jsobject_of ~prepend_pattern:cid ~wrap_body:jscid rho ty
+                 core_type_to_jsobject_of ~polyvariant ~prepend_pattern:cid ~wrap_body:jscid rho ty
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
-                 core_type_to_jsobject_of ~prepend_pattern:cid ~prepend_body:jscid rho {%core_type| $tuplelist:tyl$ |})
+                 core_type_to_jsobject_of ~polyvariant ~prepend_pattern:cid ~prepend_body:jscid rho {%core_type| $tuplelist:tyl$ |})
     else if Attrs.define_sum_type_as cl = `AsTagless then
      cl
      |> List.concat_map (function
               {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
                failwith Fmt.(str "core_type_to_jsobject_of: cannot tagless-ly marshal nullary constructor: %s" cid)
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
-               core_type_to_jsobject_of ~prepend_pattern:cid rho ty
+               core_type_to_jsobject_of ~polyvariant ~prepend_pattern:cid rho ty
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
-               core_type_to_jsobject_of ~prepend_pattern:cid rho {%core_type| $tuplelist:tyl$ |})
+               core_type_to_jsobject_of ~polyvariant ~prepend_pattern:cid rho {%core_type| $tuplelist:tyl$ |})
 
     else assert false
 
@@ -1543,7 +1565,7 @@ module Of_jsobject_expander_2 = struct
            [{%signature_item| val $lid:func_name$ : $fun_type$ |}])
 
   [@@@ocaml.warning "-39-27"]
-  let rec core_type_to_of_jsobject ?(offset = 0) ?wrap_body rho ty =
+  let rec core_type_to_of_jsobject ?(polyvariant=false) ?(offset = 0) ?wrap_body rho ty =
     match ty with
         {%core_type.noattr.loc| ' $lid:v$ |} ->
         let f = match List.assoc v rho with
@@ -1593,6 +1615,20 @@ module Of_jsobject_expander_2 = struct
          let params = List.map (fun e -> (Asttypes.Nolabel,e)) params in
          {%expression| ( $longid:li$ . $lid:fname$ $list:params$ ) |}
 
+      | {%core_type.noattr.loc| [ $list:rfl$ ] |} ->
+         let cl =
+           rfl
+           |> List.map (function
+                    {%row_field| $_$ |} ->
+                     failwith Fmt.(str "of_jsobject: variant cannot include inheritance: %a" Std_derivers.pp_core_type ty)
+                  | {%row_field.noattr.loc| ` $id:cid$ of $isconst:_$ $list:tyl$ |} ->
+                     {%constructor_declaration| $uid:cid$ of $list:tyl$ |}
+                  | rf ->
+                     failwith Fmt.(str "of_jsobject: unrecognized row_field: %a" Std_derivers.pp_row_field rf)
+                ) in
+         let cases = variant_type_to_of_jsobject ~loc ~polyvariant:true rho cl in
+         {%expression| function $list:cases$ |}
+
       | {%core_type.noattr.loc| $tuplelist:tyl$ |} ->
          let len = List.length tyl in
          let convert1 i ty =
@@ -1605,7 +1641,11 @@ module Of_jsobject_expander_2 = struct
          let exprs = ind_var_patt_expr_conv_list |> List.map (fun (_,_,_,e,_) -> e) in
          let rhs = match wrap_body with
              None -> {%expression| Ok ( $tuplelist:exprs$ ) |}
-           | Some cid -> {%expression| Ok ( $uid:cid$ ( $tuplelist:exprs$ ) ) |}
+           | Some cid ->
+              if polyvariant then
+                {%expression| Ok ( ` $id:cid$ ( $tuplelist:exprs$ ) ) |}
+              else
+                {%expression| Ok ( $uid:cid$ ( $tuplelist:exprs$ ) ) |}
          in
          let rhs =
            List.fold_right (fun (i,v,p,e,conv) rhs ->
@@ -1647,7 +1687,7 @@ module Of_jsobject_expander_2 = struct
                 field_name_jsfldname_var_longid_expr_conv_list rhs in
     {%expression| fun r -> (is_object r) >>= (fun obj -> $rhs$) |}
 
-  and variant_type_to_of_jsobject ~loc rho cl =
+  and variant_type_to_of_jsobject ?(polyvariant=false) ~loc rho cl =
     if Attrs.define_sum_type_as cl = `Regular then
       let cases =
         cl
@@ -1655,15 +1695,26 @@ module Of_jsobject_expander_2 = struct
                                let jscid = Attrs.constructor_name cd in
                                match cd with
                                  {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
-                                  let rhs = {%expression| Ok $uid:cid$ |} in
+                                  let rhs =
+                                    if polyvariant then
+                                      {%expression| Ok ( ` $id:cid$ ) |}
+                                    else
+                                      {%expression| Ok $uid:cid$ |} in
                                   (jscid, rhs)
                                | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
                                   let rhs = core_type_to_of_jsobject rho ty in
-                                  let rhs = {%expression|
-                                             (((array_get_ind arr 1) >>= $rhs$) >*=
-                                                (fun emsg -> concat_error_messages "1" emsg))
-                                             >>= (fun v0 -> Ok ($uid:cid$ v0))
-                                             |} in
+                                  let rhs =
+                                    let body =
+                                      if polyvariant then
+                                        {%expression| ` $id:cid$ v0 |}
+                                      else
+                                        {%expression| $uid:cid$ v0 |}
+                                    in
+                                    {%expression|
+                                     (((array_get_ind arr 1) >>= $rhs$) >*=
+                                        (fun emsg -> concat_error_messages "1" emsg))
+                                     >>= (fun v0 -> Ok ($body$))
+                                     |} in
                                   (jscid, rhs)
                                | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                                   let rhs = core_type_to_of_jsobject ~offset:1 ~wrap_body:cid rho {%core_type| $tuplelist:tyl$ |} in

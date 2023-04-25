@@ -185,7 +185,6 @@ let () = should_parse "string list" {|["some","quick","по-русски"]|}
                       string_list_of_jsobject
                       jsobject_of_string_list
 
-(*
 type var1 = [ `A | `B of int ] [@@deriving jsobject]
 let () = should_parse "var1 A" {|["A"]|}
                       var1_of_jsobject
@@ -201,6 +200,7 @@ type user = {
     name: string;
     status: status
   } [@@deriving jsobject]
+(*
 module NullableUser = struct
   type t = {
       age: int option;
