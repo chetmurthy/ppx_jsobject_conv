@@ -51,12 +51,12 @@ type with_defaults = {def_cond: condition [@default Gt(32)];
 type err_default = {something: float [@jsobject.default_on_error 0.0];
                     query: query option [@jsobject.default_on_error None]
                    } [@@deriving jsobject]
-(*
 module Email : sig
   type t = string [@@deriving jsobject]
   val show : 'a ->  'a
 end
 type email_info = {email: Email.t} [@@deriving jsobject]
+(*
 type variant_as_object = Gtn of int [@name "$gt"] [@jsobject.sum_type_as "object"]
                        | Ltn of int [@name "$lt"]  [@@deriving jsobject]
 type enum = Var1 [@name "var1"] | Var2 | Var3 [@sum_type_as "enum"] [@@deriving jsobject]

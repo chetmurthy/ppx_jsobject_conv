@@ -279,7 +279,6 @@ let () = should_parse "default on error"
                       err_default_of_jsobject
                       jsobject_of_err_default
 
-(*
 module Email = struct
   type t = string [@@deriving jsobject]
   let of_jsobject o =
@@ -298,6 +297,7 @@ let () = should_parse "email" "{\"email\":\"some@example.org\"}"
          should_fail "invalid email" "{\"email\":\"someexample.org\"}"
                      email_info_of_jsobject
 
+(*
 type variant_as_object = Gtn of int [@name "$gt"] [@jsobject.sum_type_as "object"]
                        | Ltn of int [@name "$lt"]  [@@deriving jsobject]
 let () = should_parse "variant as object"
