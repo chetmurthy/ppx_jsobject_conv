@@ -785,8 +785,10 @@ module Jsobject_of_expander_2 = struct
            |> List.map (function
                     {%row_field| $_$ |} ->
                      failwith Fmt.(str "jsobject_of: variant cannot include inheritance: %a" Std_derivers.pp_core_type ty)
-                  | {%row_field.noattr.loc| ` $id:cid$ of $isconst:_$ $list:tyl$ |} ->
-                     {%constructor_declaration| $uid:cid$ of $list:tyl$ |}
+                  | {%row_field.noattr.loc| ` $id:cid$ |} ->
+                     {%constructor_declaration| $uid:cid$ |}
+                  | {%row_field.noattr.loc| ` $id:cid$ of $ty$ |} ->
+                     {%constructor_declaration| $uid:cid$ of $ty$ |}
                   | rf ->
                      failwith Fmt.(str "jsobject_of: unrecognized row_field: %a" Std_derivers.pp_row_field rf)
                 ) in
@@ -1639,8 +1641,10 @@ module Of_jsobject_expander_2 = struct
            |> List.map (function
                     {%row_field| $_$ |} ->
                      failwith Fmt.(str "of_jsobject: variant cannot include inheritance: %a" Std_derivers.pp_core_type ty)
-                  | {%row_field.noattr.loc| ` $id:cid$ of $isconst:_$ $list:tyl$ |} ->
-                     {%constructor_declaration| $uid:cid$ of $list:tyl$ |}
+                  | {%row_field.noattr.loc| ` $id:cid$ |} ->
+                     {%constructor_declaration| $uid:cid$ |}
+                  | {%row_field.noattr.loc| ` $id:cid$ of $ty$ |} ->
+                     {%constructor_declaration| $uid:cid$ of $ty$ |}
                   | rf ->
                      failwith Fmt.(str "of_jsobject: unrecognized row_field: %a" Std_derivers.pp_row_field rf)
                 ) in
