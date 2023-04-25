@@ -308,7 +308,6 @@ let () = should_parse "variant as object"
          should_fail "invalid value" "{\"$gt\":\"something\"}"
                      variant_as_object_of_jsobject
 
-(*
 type enum = Var1 [@name "var1"] | Var2 | Var3 [@sum_type_as "enum"] [@@deriving jsobject]
 type enum_info = {enum: enum} [@@deriving jsobject]
 let () = should_parse "enum" "{\"enum\":\"var1\"}"
@@ -336,6 +335,7 @@ let () =
                parametrized_of_jsobject
                jsobject_of_parametrized
 
+(*
 type tagless =  U2 of {inlinef: float; inlines: string}
               | U1 of user [@jsobject.sum_type_as "tagless"]
                            [@@deriving jsobject]

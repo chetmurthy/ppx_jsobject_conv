@@ -901,6 +901,18 @@ module Jsobject_of_expander_2 = struct
                failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %a" Std_derivers.pp_constructor_declaration cd)
           )
 
+    else if Attrs.define_sum_type_as cl = `AsEnum then
+     cl
+     |> List.map (function cd ->
+            let jscid = Attrs.constructor_name cd in
+            match cd with
+              {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+               {%case| $uid:cid$ -> jsobject_of_string $string:jscid$ |}
+
+            | _ ->
+               failwith Fmt.(str "variant type as_enum only with nullary constructors: %a" Std_derivers.pp_constructor_declaration cd)
+          )
+
     else assert false
 
   let td_to_jsobject_of = function
@@ -1812,7 +1824,7 @@ module Of_jsobject_expander_2 = struct
                 $rhs$ |}]
 
     else if Attrs.define_sum_type_as cl = `AsObject then
-      let jscid_case_list =
+      let jscid_rhs_list =
         cl
         |> List.map (function cd ->
             let jscid = Attrs.constructor_name cd in
@@ -1845,11 +1857,11 @@ module Of_jsobject_expander_2 = struct
                failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %a" Std_derivers.pp_constructor_declaration cd)
              ) in
       let cases = 
-        jscid_case_list
+        jscid_rhs_list
         |> List.map (fun (jscid, rhs) ->
                {%case| $string:jscid$ -> $rhs$ |}
              ) in
-      let jscids = List.map fst jscid_case_list in
+      let jscids = List.map fst jscid_rhs_list in
       let cases = cases @ [
             let msg = Fmt.(str "object should contain one key of the %a, got " (list ~sep:(const string  "/") string) jscids) in
             {%case| unknown -> Error ($string:msg$ ^ unknown) |}
@@ -1862,6 +1874,40 @@ module Of_jsobject_expander_2 = struct
          (fun obj ->
            (object_get_sole_key obj) >>= $rhs$)
        |}]
+
+    else if Attrs.define_sum_type_as cl = `AsEnum then
+      let jscid_rhs_list =
+        cl
+        |> List.map (function cd ->
+            let jscid = Attrs.constructor_name cd in
+            match cd with
+              {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+               let rhs =
+                 if polyvariant then
+                   {%expression| Ok ( ` $id:cid$ ) |}
+                 else
+                   {%expression| Ok $uid:cid$ |} in
+               (jscid, rhs)
+            | _ ->
+               failwith Fmt.(str "variant type as_enum only with nullary constructors: %a" Std_derivers.pp_constructor_declaration cd)
+             ) in
+      let cases = 
+        jscid_rhs_list
+        |> List.map (fun (jscid, rhs) ->
+               {%case| $string:jscid$ -> $rhs$ |}
+             ) in
+      let jscids = List.map fst jscid_rhs_list in
+      let cases = cases @ [
+            let msg = Fmt.(str "expected one of the %a, got " (list ~sep:(const string  "/") string) jscids) in
+            {%case| unknown -> Error ($string:msg$ ^ unknown) |}
+          ]
+      in
+      let rhs = {%expression| function $list:cases$ |} in
+      [{%case|
+        v ->
+             ((defined_or_error v) >>= string_of_jsobject) >>=
+               $rhs$
+        |}]
 
   else assert false
 

@@ -58,13 +58,13 @@ end
 type email_info = {email: Email.t} [@@deriving jsobject]
 type variant_as_object = Gtn of int [@name "$gt"] [@jsobject.sum_type_as "object"]
                        | Ltn of int [@name "$lt"]  [@@deriving jsobject]
-(*
 type enum = Var1 [@name "var1"] | Var2 | Var3 [@sum_type_as "enum"] [@@deriving jsobject]
 type enum_info = {enum: enum} [@@deriving jsobject]
 type ('a,'b) type_parameters = {data: 'a; ident: 'b; kind: string} [@@deriving jsobject]
 type some_detais = {details: string} [@@deriving jsobject]
 type some_ident = string [@@deriving jsobject]
 type parametrized = (some_detais, some_ident) type_parameters [@@deriving jsobject]
+(*
 type tagless =  U2 of {inlinef: float; inlines: string}
               | U1 of user [@jsobject.sum_type_as "tagless"]
                            [@@deriving jsobject]
