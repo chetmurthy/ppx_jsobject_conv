@@ -1671,6 +1671,16 @@ module Of_jsobject_expander_2 = struct
                let longid = OrigLocation.mkloc {%longident_t| $lid:fldname$ |} loc in
                let expr = {%expression| $lid:var$ |} in
                let conv = core_type_to_of_jsobject rho fldty in
+               let conv = match Attrs.field_default ld, Attrs.error_default ld with
+                   Some _, Some _ -> 
+                   (* this should be handled during attrs parsing *)
+                   Location.raise_errorf
+                     ~loc "ppx_jsobject_conv: default_on_error and default attrs can't be used together"
+                 | Some v, None ->
+                    {%expression| defined_or_default $conv$ $v$ |}
+                 | None, Some v ->
+                    {%expression| convert_or_default $conv$ $v$ |}
+                 | None, None -> conv in
                let jsfldname = Attrs.field_name ld in
                (fldname, jsfldname, var, longid, expr, conv)) in
     let exprfields = 

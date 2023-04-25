@@ -45,13 +45,13 @@ type query = {amount: float; condition: condition} [@@deriving jsobject]
 type basket = {name: string; query: query} [@@deriving jsobject]
 type message = Basket of basket | Nop [@@deriving jsobject]
 type command = {message: message} [@@deriving jsobject]
-(*
 type with_defaults = {def_cond: condition [@default Gt(32)];
                       enabled: bool [@default true];
                       kind: string [@default "integer"]} [@@deriving jsobject]
 type err_default = {something: float [@jsobject.default_on_error 0.0];
                     query: query option [@jsobject.default_on_error None]
                    } [@@deriving jsobject]
+(*
 module Email : sig
   type t = string [@@deriving jsobject]
   val show : 'a ->  'a
