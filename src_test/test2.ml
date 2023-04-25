@@ -200,7 +200,6 @@ type user = {
     name: string;
     status: status
   } [@@deriving jsobject]
-(*
 module NullableUser = struct
   type t = {
       age: int option;
@@ -252,6 +251,7 @@ let () = should_parse "command" command_good
          should_fail "command with nested error" command_bad_nested_error
                      command_of_jsobject
 
+(*
 type with_defaults = {def_cond: condition [@default Gt(32)];
                       enabled: bool [@default true];
                       kind: string [@default "integer"]} [@@deriving jsobject]

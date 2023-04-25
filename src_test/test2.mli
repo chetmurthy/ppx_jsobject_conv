@@ -24,7 +24,6 @@ type maybe_int = int option [@@deriving jsobject]
 type arr_float = float array [@@deriving jsobject]
 type string_list = string list [@@deriving jsobject]
 type var1 = [ `A | `B of int ] [@@deriving jsobject]
-(*
 type status = [`Created |
                `Registered of int * string |
                `Deleted of int] [@@deriving jsobject]
@@ -46,6 +45,7 @@ type query = {amount: float; condition: condition} [@@deriving jsobject]
 type basket = {name: string; query: query} [@@deriving jsobject]
 type message = Basket of basket | Nop [@@deriving jsobject]
 type command = {message: message} [@@deriving jsobject]
+(*
 type with_defaults = {def_cond: condition [@default Gt(32)];
                       enabled: bool [@default true];
                       kind: string [@default "integer"]} [@@deriving jsobject]
