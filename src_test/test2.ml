@@ -337,6 +337,12 @@ let () =
 
 type rec3 = A of int * bool
           | B of { x : int * bool } [@@deriving jsobject]
+let () = should_parse "rec3 A" {|["A",1,true]|}
+                      rec3_of_jsobject
+                      jsobject_of_rec3
+let () = should_parse "rec3 B" {|["B",{"x":[1,true]}]|}
+                      rec3_of_jsobject
+                      jsobject_of_rec3
 
 (*
 type tagless =  U2 of {inlinef: float; inlines: string}
