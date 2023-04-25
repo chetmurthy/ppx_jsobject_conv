@@ -24,6 +24,7 @@ type maybe_int = int option [@@deriving jsobject]
 type arr_float = float array [@@deriving jsobject]
 type string_list = string list [@@deriving jsobject]
 (*
+type var1 = [ `A | `B of int ] [@@deriving jsobject]
 type status = [`Created |
                `Registered of int * string |
                `Deleted of int] [@@deriving jsobject]

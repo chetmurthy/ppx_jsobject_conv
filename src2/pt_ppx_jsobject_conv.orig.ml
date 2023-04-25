@@ -805,7 +805,7 @@ module Jsobject_of_expander_2 = struct
                 | (Some _, Some _) -> assert false in
               {%case.noattr.loc| $patt$ -> $body$ |}) 
 
-  let record_type_to_jsobject_of ~loc rho ll =
+  and record_type_to_jsobject_of ~loc rho ll =
     let field_name_var_longid_patt_conv_list =
       ll
       |> List.map (function
@@ -826,6 +826,30 @@ module Jsobject_of_expander_2 = struct
              {%expression| Some ($string:jsfldname$, ((function $list:conv$) $lid:var$)) |}) in
     [{%case| $patt$ -> make_jsobject_of_some [| $list:jstuples$ |] |}]
 
+  and variant_type_to_jsobject_of ~loc rho cl =
+    if Attrs.define_sum_type_as cl = `Regular then
+       cl
+       |> List.concat_map (function cd ->
+              let jscid = Attrs.constructor_name cd in
+              match cd with
+                {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+                 [{%case| $uid:cid$ -> to_js_array [jsobject_of_string $string:jscid$] |}]
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+                 core_type_to_jsobject_of ~prepend_pattern:cid ~wrap_body:jscid rho ty
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
+                 core_type_to_jsobject_of ~prepend_pattern:cid ~prepend_body:jscid rho {%core_type| $tuplelist:tyl$ |})
+    else if Attrs.define_sum_type_as cl = `AsTagless then
+     cl
+     |> List.concat_map (function
+              {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+               failwith Fmt.(str "core_type_to_jsobject_of: cannot tagless-ly marshal nullary constructor: %s" cid)
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+               core_type_to_jsobject_of ~prepend_pattern:cid rho ty
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
+               core_type_to_jsobject_of ~prepend_pattern:cid rho {%core_type| $tuplelist:tyl$ |})
+
+    else assert false
+
   let td_to_jsobject_of = function
     {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $ty$ |} ->
@@ -841,52 +865,18 @@ module Jsobject_of_expander_2 = struct
                  pl rhs in
      [{%value_binding| $lid:fname$ = $rhs$ |}]
 
-  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} when Attrs.define_sum_type_as cl = `Regular ->
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
      let fname = name_of_tdname tname in
      let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
                           let fname = Printf.sprintf "_of_%s" v in
                           (v, {%expression| $lid:fname$ |})) in
-     let cases =
-       cl
-       |> List.concat_map (function cd ->
-              let jscid = Attrs.constructor_name cd in
-              match cd with
-                {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
-                 [{%case| $uid:cid$ -> to_js_array [jsobject_of_string $string:jscid$] |}]
-              | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
-                 core_type_to_jsobject_of ~prepend_pattern:cid ~wrap_body:jscid rho ty
-              | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
-                 core_type_to_jsobject_of ~prepend_pattern:cid ~prepend_body:jscid rho {%core_type| $tuplelist:tyl$ |})
-     in
+     let cases = variant_type_to_jsobject_of ~loc rho cl in
      let rhs = {%expression| function $list:cases$ |} in
      let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
                    let fname = Printf.sprintf "_of_%s" v in
                    {%expression| fun $lid:fname$ -> $rhs$ |})
                  pl rhs in
      [{%value_binding| $lid:fname$ = $rhs$ |}]
-
-  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} when Attrs.define_sum_type_as cl = `AsTagless ->
-     let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
-     let cases =
-       cl
-       |> List.concat_map (function
-                {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
-                 failwith Fmt.(str "core_type_to_jsobject_of: cannot tagless-ly marshal nullary constructor: %s" cid)
-              | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
-                 core_type_to_jsobject_of ~prepend_pattern:cid rho ty
-              | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
-                 core_type_to_jsobject_of ~prepend_pattern:cid rho {%core_type| $tuplelist:tyl$ |})
-     in
-     let rhs = {%expression| function $list:cases$ |} in
-     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
-                   let fname = Printf.sprintf "_of_%s" v in
-                   {%expression| fun $lid:fname$ -> $rhs$ |})
-                 pl rhs in
-     [{%value_binding| $lid:fname$ = $rhs$ |}]
-
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:ll$ } |} ->
      let fname = name_of_tdname tname in
@@ -1553,7 +1543,7 @@ module Of_jsobject_expander_2 = struct
            [{%signature_item| val $lid:func_name$ : $fun_type$ |}])
 
   [@@@ocaml.warning "-39-27"]
-  let rec core_type_to_of_jsobject ?offset ?wrap_body rho ty =
+  let rec core_type_to_of_jsobject ?(offset = 0) ?wrap_body rho ty =
     match ty with
         {%core_type.noattr.loc| ' $lid:v$ |} ->
         let f = match List.assoc v rho with
@@ -1610,8 +1600,7 @@ module Of_jsobject_expander_2 = struct
            let patt = {%pattern| $lid:var$ |} in
            let expr = {%expression| $lid:var$ |} in
            let conv = core_type_to_of_jsobject rho ty in
-           let offset_plus_i = match offset with None -> i | Some j -> i+j in
-           (string_of_int offset_plus_i, var,patt,expr,conv) in
+           (string_of_int (offset + i), var,patt,expr,conv) in
          let ind_var_patt_expr_conv_list = List.mapi convert1 tyl in
          let exprs = ind_var_patt_expr_conv_list |> List.map (fun (_,_,_,e,_) -> e) in
          let rhs = match wrap_body with
@@ -1626,15 +1615,14 @@ module Of_jsobject_expander_2 = struct
                 >>= (fun $lid:v$ -> $rhs$) |})
              ind_var_patt_expr_conv_list rhs
          in
-         let offset_plus_len = match offset with None -> len | Some j -> len+j in
          {%expression| fun v ->
-           (is_array_of_size_n v $int:string_of_int offset_plus_len$) >>=
+           (is_array_of_size_n v $int:string_of_int (offset + len)$) >>=
              (fun arr -> $rhs$) |}
 
       | ct ->
          failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Std_derivers.pp_core_type ct)
 
-  let record_type_to_of_jsobject ~loc rho ll =
+  and record_type_to_of_jsobject ~loc rho ll =
     let field_name_jsfldname_var_longid_expr_conv_list =
       ll
       |> List.map (function
@@ -1659,76 +1647,47 @@ module Of_jsobject_expander_2 = struct
                 field_name_jsfldname_var_longid_expr_conv_list rhs in
     {%expression| fun r -> (is_object r) >>= (fun obj -> $rhs$) |}
 
-  let td_to_of_jsobject = function
-    {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
-  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $ty$ |} ->
-     let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
-     let rhs = core_type_to_of_jsobject rho ty in
-     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
-                   let fname = Printf.sprintf "_of_%s" v in
-                   {%expression| fun $lid:fname$ -> $rhs$ |})
-                 pl rhs in
-     [{%value_binding| $lid:fname$ = $rhs$ |}]
-
-
-  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} when Attrs.define_sum_type_as cl = `Regular ->
-     let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
-     let cases =
-       cl
-       |> List.map (function cd ->
-              let jscid = Attrs.constructor_name cd in
-              match cd with
-                {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
-                 let rhs = {%expression| Ok $uid:cid$ |} in
-                 (jscid, rhs)
-              | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
-                 let rhs = core_type_to_of_jsobject rho ty in
-                 let rhs = {%expression|
-                            (((array_get_ind arr 1) >>= $rhs$) >*=
-                            (fun emsg -> concat_error_messages "1" emsg))
-                            >>= (fun v0 -> Ok ($uid:cid$ v0))
-                  |} in
-                 (jscid, rhs)
-              | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
-                 let rhs = core_type_to_of_jsobject ~offset:1 ~wrap_body:cid rho {%core_type| $tuplelist:tyl$ |} in
-                 let rhs = {%expression| $rhs$ v |} in
-                 (jscid, rhs))
-       |> List.map (fun (cid, rhs) ->
-              {%case| $string:cid$ -> $rhs$ |}
-            ) in
-     let cases = cases @ [
-           let cids =
-             cl
-             |> List.map (function {%constructor_declaration.noattr| $uid:cid$ of $list:_l$ |} -> cid) in
-           let msg = Fmt.(str "0: expected one of the %a, got " (list ~sep:(const string  "/") string) cids) in
-           {%case| unknown -> Error ($string:msg$ ^ unknown) |}
-         ]
-     in
+  and variant_type_to_of_jsobject ~loc rho cl =
+    if Attrs.define_sum_type_as cl = `Regular then
+      let cases =
+        cl
+        |> List.map (function cd ->
+                               let jscid = Attrs.constructor_name cd in
+                               match cd with
+                                 {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
+                                  let rhs = {%expression| Ok $uid:cid$ |} in
+                                  (jscid, rhs)
+                               | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
+                                  let rhs = core_type_to_of_jsobject rho ty in
+                                  let rhs = {%expression|
+                                             (((array_get_ind arr 1) >>= $rhs$) >*=
+                                                (fun emsg -> concat_error_messages "1" emsg))
+                                             >>= (fun v0 -> Ok ($uid:cid$ v0))
+                                             |} in
+                                  (jscid, rhs)
+                               | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
+                                  let rhs = core_type_to_of_jsobject ~offset:1 ~wrap_body:cid rho {%core_type| $tuplelist:tyl$ |} in
+                                  let rhs = {%expression| $rhs$ v |} in
+                                  (jscid, rhs))
+        |> List.map (fun (cid, rhs) ->
+               {%case| $string:cid$ -> $rhs$ |}
+             ) in
+      let cases = cases @ [
+            let cids =
+              cl
+              |> List.map (function {%constructor_declaration.noattr| $uid:cid$ of $list:_l$ |} -> cid) in
+            let msg = Fmt.(str "0: expected one of the %a, got " (list ~sep:(const string  "/") string) cids) in
+            {%case| unknown -> Error ($string:msg$ ^ unknown) |}
+          ]
+      in
      let rhs = {%expression| function $list:cases$ |} in
-     let rhs = {%expression|
-                fun v -> (is_array v) >>=
+     [{%case| v -> (is_array v) >>=
                   (fun arr ->
-                    ((array_get_ind arr 0) >>= string_of_jsobject) >>= $rhs$ ) |} in
+                    ((array_get_ind arr 0) >>= string_of_jsobject) >>= $rhs$ ) |}]
 
-     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
-                   let fname = Printf.sprintf "_of_%s" v in
-                   {%expression| fun $lid:fname$ -> $rhs$ |})
-                 pl rhs in
-     [{%value_binding| $lid:fname$ = $rhs$ |}]
-
-  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} when Attrs.define_sum_type_as cl = `AsTagless ->
-     let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
-     let cases =
-       cl
+    else if Attrs.define_sum_type_as cl = `AsTagless then
+      let cases =
+        cl
        |> List.map (function
                 {%constructor_declaration.noattr.loc| $uid:cid$ |} ->
                  failwith Fmt.(str "core_type_to_jsobject_of: cannot tagless-ly demarshal nullary constructor: %s" cid)
@@ -1749,11 +1708,32 @@ module Of_jsobject_expander_2 = struct
                            $rhs$)
                     |})
                  cases fallthru in
-     let rhs = {%expression|
-                fun v ->
-                let emsg = "_: neither of possible tagless conversions applicable, possible errors: " in
-                $rhs$ |} in
+     [{%case| v -> let emsg = "_: neither of possible tagless conversions applicable, possible errors: " in
+                $rhs$ |}]
+  else assert false
 
+  let td_to_of_jsobject = function
+    {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $ty$ |} ->
+     let fname = name_of_tdname tname in
+     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+                          let fname = Printf.sprintf "_of_%s" v in
+                          (v, {%expression| $lid:fname$ |})) in
+     let rhs = core_type_to_of_jsobject rho ty in
+     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+                   let fname = Printf.sprintf "_of_%s" v in
+                   {%expression| fun $lid:fname$ -> $rhs$ |})
+                 pl rhs in
+     [{%value_binding| $lid:fname$ = $rhs$ |}]
+
+
+  | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
+     let fname = name_of_tdname tname in
+     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+                          let fname = Printf.sprintf "_of_%s" v in
+                          (v, {%expression| $lid:fname$ |})) in
+     let cases = variant_type_to_of_jsobject ~loc rho cl in
+     let rhs = {%expression| function $list:cases$ |} in
      let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
                    let fname = Printf.sprintf "_of_%s" v in
                    {%expression| fun $lid:fname$ -> $rhs$ |})

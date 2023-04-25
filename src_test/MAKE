@@ -4,6 +4,10 @@
 #js_of_ocaml test.exe
 #node test.js
 
+#ocamlfind ocamlc -package ppx_jsobject_conv -package js_of_ocaml,js_of_ocaml-ppx,webtest,webtest-js -linkpkg test2.ml  -o test2.exe
+#js_of_ocaml test2.exe
+#node test2.js
+
 #ocamlfind ocamlc -dsource -package ppx_jsobject_conv -package js_of_ocaml,js_of_ocaml-ppx,webtest,webtest-js -linkpkg test.ml
 ocamlfind ocamlc -dsource -package ppx_jsobject_conv -package js_of_ocaml,js_of_ocaml-ppx,webtest,webtest-js -linkpkg test2.ml
 ocamlfind ocamlc -dsource -package ppx_jsobject_conv -package js_of_ocaml,js_of_ocaml-ppx,webtest,webtest-js -linkpkg test2.mli

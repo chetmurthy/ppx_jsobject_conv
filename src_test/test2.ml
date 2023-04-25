@@ -186,6 +186,13 @@ let () = should_parse "string list" {|["some","quick","по-русски"]|}
                       jsobject_of_string_list
 
 (*
+type var1 = [ `A | `B of int ] [@@deriving jsobject]
+let () = should_parse "var1 A" {|["A"]|}
+                      var1_of_jsobject
+                      jsobject_of_var1
+let () = should_parse "var1 B" {|["B",1]|}
+                      var1_of_jsobject
+                      jsobject_of_var1
 type status = [`Created |
                `Registered of int * string |
                `Deleted of int] [@@deriving jsobject]
