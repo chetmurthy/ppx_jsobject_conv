@@ -546,46 +546,63 @@ module Jsobject_of_expander_2 = struct
 
     else assert false
 
+  let wrapper_with_fun_type ~loc pl tname = function
+      {%value_binding| $lid:f$ = $e$ |} ->
+      let fun_type = fun_type ~loc pl tname in
+      let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
+      {%value_binding| $lid:f$ : $list:tvl$ . $fun_type$ = $e$ |} 
+
+  let wrapper_with_newtype ~loc pl rhs =
+    List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+        Parsetree.{pexp_desc=Pexp_newtype(Location.{txt=v;loc=loc}, rhs);
+                   pexp_loc=loc;
+                   pexp_loc_stack=[];
+                   pexp_attributes=[]})
+      pl rhs
+
+  let build_rho pl =
+    pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+               let fname = Printf.sprintf "_of_%s" v in
+               (v, {%expression| $lid:fname$ |}))
+
+  let prepend_params pl rhs =
+    List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+        let fname = Printf.sprintf "_of_%s" v in
+        let argty = converter_type {%core_type| $lid:v$ |} in
+        {%expression| fun ( $lid:fname$ : $argty$ ) -> $rhs$ |})
+      pl rhs
+
   let td_to_jsobject_of = function
     {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $ty$ |} ->
      let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
+     let rho = build_rho pl in
      let cases = core_type_to_jsobject_of rho ty in
      let rhs = {%expression| function $list:cases$ |} in
-     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
-                   let fname = Printf.sprintf "_of_%s" v in
-                   {%expression| fun $lid:fname$ -> $rhs$ |})
-                 pl rhs in
-     [{%value_binding| $lid:fname$ v = $rhs$ v |}]
+     let rhs = prepend_params pl rhs in
+     let rhs = wrapper_with_newtype ~loc pl rhs in
+     [wrapper_with_fun_type ~loc pl tname
+        {%value_binding| $lid:fname$ v = let open! Ppx_jsobject_conv_runtime in $rhs$ v |}]
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
      let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
+     let rho = build_rho pl in
      let cases = variant_type_to_jsobject_of ~loc rho cl in
      let rhs = {%expression| function $list:cases$ |} in
-     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
-                   let fname = Printf.sprintf "_of_%s" v in
-                   {%expression| fun $lid:fname$ -> $rhs$ |})
-                 pl rhs in
-     [{%value_binding| $lid:fname$ = $rhs$ |}]
+     let rhs = prepend_params pl rhs in
+     let rhs = wrapper_with_newtype ~loc pl rhs in
+     [wrapper_with_fun_type ~loc pl tname
+        {%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:ll$ } |} ->
      let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
+     let rho = build_rho pl in
      let case = record_type_to_jsobject_of ~loc rho ll in
      let rhs = {%expression| function $list:[case]$ |} in
-     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
-                   let fname = Printf.sprintf "_of_%s" v in
-                   {%expression| fun $lid:fname$ -> $rhs$ |})
-                 pl rhs in
-     [{%value_binding| $lid:fname$ = $rhs$ |}]
+     let rhs = prepend_params pl rhs in
+     let rhs = wrapper_with_newtype ~loc pl rhs in
+     [wrapper_with_fun_type ~loc pl tname
+        {%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
      
   | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
      let fname = name_of_tdname tname in
@@ -595,12 +612,14 @@ module Jsobject_of_expander_2 = struct
      [
        {%value_binding|
         ($lid:default_fname$ : $fty$) =
+            let open! Ppx_jsobject_conv_runtime in 
             fun _ ->
               throw_js_error
                 ("ppx_jsobject_conv: Maybe a [@@deriving jsobject] is missing when extending the type "
                    ^ $string:tname$) |}
-     ; {%value_binding| $lid:ref_name$ = ref $lid:default_fname$ |}
+     ; {%value_binding| $lid:ref_name$ = let open! Ppx_jsobject_conv_runtime in ref $lid:default_fname$ |}
      ; {%value_binding| $lid:fname$ =
+            let open! Ppx_jsobject_conv_runtime in 
             function | i -> (!) $lid:ref_name$ i
         |}
      ]
@@ -609,16 +628,6 @@ module Jsobject_of_expander_2 = struct
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
     let rec_flag = really_recursive rec_flag tds in
     let bindings = tds |> List.concat_map td_to_jsobject_of in
-    let bindings =
-      bindings
-      |> List.map (function
-               {%value_binding.noattr.loc| $lid:fname$ = $e$ |} ->
-                let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
-                {%value_binding.noattr.loc| $lid:fname$ = $e$ |}
-             | {%value_binding.noattr.loc| ($lid:fname$ : $ty$) = $e$ |} ->
-                let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
-                {%value_binding.noattr.loc| ($lid:fname$ : $ty$) = $e$ |}
-           ) in
     [{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
 
   let str_type_ext ~loc ~path:_ te =
@@ -1068,45 +1077,62 @@ module Of_jsobject_expander_2 = struct
 
   else assert false
 
+  let wrapper_with_fun_type ~loc pl tname = function
+      {%value_binding| $lid:f$ = $e$ |} ->
+      let fun_type = fun_type ~loc pl tname in
+      let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
+      {%value_binding| $lid:f$ : $list:tvl$ . $fun_type$ = $e$ |} 
+
+  let wrapper_with_newtype ~loc pl rhs =
+    List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+        Parsetree.{pexp_desc=Pexp_newtype(Location.{txt=v;loc=loc}, rhs);
+                   pexp_loc=loc;
+                   pexp_loc_stack=[];
+                   pexp_attributes=[]})
+      pl rhs
+
+  let build_rho pl =
+    pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
+               let fname = Printf.sprintf "_of_%s" v in
+               (v, {%expression| $lid:fname$ |}))
+
+  let prepend_params pl rhs =
+    List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
+        let fname = Printf.sprintf "_of_%s" v in
+        let argty = converter_type {%core_type| $lid:v$ |} in
+        {%expression| fun ( $lid:fname$ : $argty$ ) -> $rhs$ |})
+      pl rhs
+
   let td_to_of_jsobject = function
     {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $ty$ |} ->
      let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
+     let rho = build_rho pl in
      let rhs = core_type_to_of_jsobject rho ty in
-     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
-                   let fname = Printf.sprintf "_of_%s" v in
-                   {%expression| fun $lid:fname$ -> $rhs$ |})
-                 pl rhs in
-     [{%value_binding| $lid:fname$ v = $rhs$ v |}]
+     let rhs = {%expression| fun v -> $rhs$ v |} in
+     let rhs = prepend_params pl rhs in
+     let rhs = wrapper_with_newtype ~loc pl rhs in
+     [wrapper_with_fun_type ~loc pl tname
+        {%value_binding| $lid:fname$ =  let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
 
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
      let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
+     let rho = build_rho pl in
      let cases = variant_type_to_of_jsobject ~loc rho cl in
      let rhs = {%expression| function $list:cases$ |} in
-     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
-                   let fname = Printf.sprintf "_of_%s" v in
-                   {%expression| fun $lid:fname$ -> $rhs$ |})
-                 pl rhs in
-     [{%value_binding| $lid:fname$ = $rhs$ |}]
+     let rhs = prepend_params pl rhs in
+     let rhs = wrapper_with_newtype ~loc pl rhs in
+     [wrapper_with_fun_type ~loc pl tname
+        {%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:ll$ } |} ->
      let fname = name_of_tdname tname in
-     let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
-                          let fname = Printf.sprintf "_of_%s" v in
-                          (v, {%expression| $lid:fname$ |})) in
+     let rho = build_rho pl in
      let rhs = record_type_to_of_jsobject ~loc rho ll in
-     let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
-                   let fname = Printf.sprintf "_of_%s" v in
-                   {%expression| fun $lid:fname$ -> $rhs$ |})
-                 pl rhs in
-     [{%value_binding| $lid:fname$ = $rhs$ |}]
+     let rhs = prepend_params pl rhs in
+     let rhs = wrapper_with_newtype ~loc pl rhs in
+     [{%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
 
   | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
      let fname = name_of_tdname tname in
@@ -1115,14 +1141,16 @@ module Of_jsobject_expander_2 = struct
      let ref_name = fname^"_most_recent" in
      [
        {%value_binding|
-        ($lid:default_fname$ : $fty$) =
+        $lid:default_fname$ : $fty$ =
+            let open! Ppx_jsobject_conv_runtime in 
             fun _ ->
               Error
                 ("ppx_jsobject_conv: can't convert, maybe a [@@deriving jsobject] is missing when extending the type "
                    ^ $string:tname$)
         |}
-     ; {%value_binding| $lid:ref_name$ = ref $lid:default_fname$ |}
+     ; {%value_binding| $lid:ref_name$ = let open! Ppx_jsobject_conv_runtime in ref $lid:default_fname$ |}
      ; {%value_binding| $lid:fname$ =
+            let open! Ppx_jsobject_conv_runtime in 
             function | i -> (!) $lid:ref_name$ i
         |}
      ]
@@ -1130,16 +1158,18 @@ module Of_jsobject_expander_2 = struct
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
     let rec_flag = really_recursive rec_flag tds in
     let bindings = tds |> List.concat_map td_to_of_jsobject in
+(*
     let bindings =
       bindings
       |> List.map (function
                {%value_binding.noattr.loc| $lid:fname$ = $e$ |} ->
-             let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
-             {%value_binding.noattr.loc| $lid:fname$ = $e$ |}
-             | {%value_binding.noattr.loc| ($lid:fname$ : $ty$) = $e$ |} ->
+                let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
+                {%value_binding.noattr.loc| $lid:fname$ = $e$ |}
+             | {%value_binding.noattr.loc| ( $lid:fname$ : $ty$ ) = $e$ |} ->
                 let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
                 {%value_binding.noattr.loc| ($lid:fname$ : $ty$) = $e$ |}
            ) in
+ *)
     [{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
 
   let str_type_ext ~loc ~path:_ te =
