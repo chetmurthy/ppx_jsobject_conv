@@ -343,8 +343,9 @@ let () = should_parse "rec3 A" {|["A",1,true]|}
 let () = should_parse "rec3 B" {|["B",{"x":[1,true]}]|}
                       rec3_of_jsobject
                       jsobject_of_rec3
+type rec4 = A of (int * bool) [@jsobject.sum_type_as "tagless"]
+          | B of { x : int * bool } [@@deriving jsobject]
 
-(*
 type tagless =  U2 of {inlinef: float; inlines: string}
               | U1 of user [@jsobject.sum_type_as "tagless"]
                            [@@deriving jsobject]
@@ -358,6 +359,7 @@ let () =
   should_fail "invalid tagless" "{\"enum\":\"ftwf\"}"
               tagless_of_jsobject
 
+(*
 type drop_none = {some: string option [@jsobject.drop_none]}
                    [@@deriving jsobject]
 let () =

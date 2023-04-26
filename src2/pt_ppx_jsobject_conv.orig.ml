@@ -844,7 +844,7 @@ module Jsobject_of_expander_2 = struct
       field_name_var_longid_patt_conv_list
       |> List.map (fun (jsfldname,var,_,_,conv) ->
              {%expression| Some ($string:jsfldname$, ((function $list:conv$) $lid:var$)) |}) in
-    [{%case| $patt$ -> make_jsobject_of_some [| $list:jstuples$ |] |}]
+    {%case| $patt$ -> make_jsobject_of_some [| $list:jstuples$ |] |}
 
   and variant_type_to_jsobject_of ~loc ?(polyvariant=false) rho cl =
     if Attrs.define_sum_type_as cl = `Regular then
@@ -867,7 +867,7 @@ module Jsobject_of_expander_2 = struct
 
               | {%constructor_declaration.noattr.loc| $uid:cid$ of { $list:ll$ } |} ->
                  (match record_type_to_jsobject_of ~loc ~modify_pattern:(modify_pattern ~polyvariant:false ~loc cid) rho ll with
-                    [{%case| $patt$ -> $expr$ |}] ->
+                    {%case| $patt$ -> $expr$ |} ->
                      [{%case| $patt$ ->  let v = $expr$ in to_js_array [jsobject_of_string $string:jscid$; v] |}]
                  )
 
@@ -886,6 +886,9 @@ module Jsobject_of_expander_2 = struct
                  ~modify_pattern:(modify_pattern ~polyvariant ~loc cid)
                  rho ty
 
+              | {%constructor_declaration.noattr.loc| $uid:cid$ of { $list:ll$ } |} ->
+                 [record_type_to_jsobject_of ~loc ~modify_pattern:(modify_pattern ~polyvariant:false ~loc cid) rho ll]
+
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                core_type_to_jsobject_of
                  ~modify_pattern:(modify_pattern ~polyvariant ~loc cid)
@@ -903,7 +906,10 @@ module Jsobject_of_expander_2 = struct
                let conv_cases = core_type_to_jsobject_of rho ty in
                let conv = {%expression| function $list:conv_cases$ |} in
                {%case| $uid:cid$ v -> let v = $conv$ v in make_jsobject [|($string:jscid$, v)|] |}
-
+(*
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of { $list:ll$ } |} ->
+               record_type_to_jsobject_of ~loc ~modify_pattern:(modify_pattern ~polyvariant:false ~loc cid) rho ll
+ *)
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %a" Std_derivers.pp_constructor_declaration cd)
           )
@@ -955,8 +961,8 @@ module Jsobject_of_expander_2 = struct
      let rho = pl |>  List.map (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) ->
                           let fname = Printf.sprintf "_of_%s" v in
                           (v, {%expression| $lid:fname$ |})) in
-     let cases = record_type_to_jsobject_of ~loc rho ll in
-     let rhs = {%expression| function $list:cases$ |} in
+     let case = record_type_to_jsobject_of ~loc rho ll in
+     let rhs = {%expression| function $list:[case]$ |} in
      let rhs = List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
                    let fname = Printf.sprintf "_of_%s" v in
                    {%expression| fun $lid:fname$ -> $rhs$ |})
@@ -1826,16 +1832,22 @@ module Of_jsobject_expander_2 = struct
                  failwith Fmt.(str "core_type_to_jsobject_of: cannot tagless-ly demarshal nullary constructor: %s" cid)
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
                  let rhs = core_type_to_of_jsobject rho ty in
-                 (cid, rhs)
+                 ((wrap_constructor ~loc cid), rhs)
+
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of { $list:ll$ } |} ->
+               let rhs = record_type_to_of_jsobject ~modify_body:(wrap_constructor ~loc cid) ~loc rho ll in
+               ((fun x -> x),rhs)
+
               | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                  failwith Fmt.(str "core_type_to_jsobject_of: can only tagless-ly demarshal single-argument constructor: %s" cid)
             ) in
      let fallthru = {%expression| Error emsg |} in
-     let rhs = List.fold_right (fun (cid, demarsh) rhs ->
+     let rhs = List.fold_right (fun (modifier, demarsh) rhs ->
+                   let body = modifier {%expression| v1 |} in
                    {%expression|
                     ($demarsh$ v)
                     |> (function
-                        | Ok v1 -> Ok ($uid:cid$ v1)
+                        | Ok v1 -> Ok $body$
                         | Error msg1 ->
                            let emsg = emsg ^ "("^msg1^"); " in
                            $rhs$)
