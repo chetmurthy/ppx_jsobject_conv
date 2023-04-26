@@ -182,39 +182,6 @@ module Attrs = struct
 end
 
 (* Courtesy of ppx_sexp_conv *)
-module Fun_or_match = struct
-  type t =
-    | Fun   of expression
-    | Match of case list
-
-  let expr ~loc t =
-    match t with
-    | Fun f       -> f
-    | Match cases -> pexp_function ~loc cases
-
-  let unroll ~loc e t =
-    match t with
-    | Fun f       -> eapply ~loc f [e]
-    | Match cases -> pexp_match ~loc e cases
-
-  (** For list of expressions returns triple (bindings, pvars, evars)
-      where bindings is list of `let v_i =`;
-            pvars is list of `v_i` for patterns, and
-            evars is list of expressions applied to corresponding temp var
-   *)
-  let map_tmp_vars ~loc ts =
-    let vars = List.mapi ts ~f:(fun i _ -> "v" ^ string_of_int i) in
-    let bindings =
-      List.map2 vars ts
-                ~f:(fun var t ->
-                  let e, p = mk_ep_var ~loc var in
-                  let expr = unroll ~loc e t in
-                  value_binding ~loc ~pat:p ~expr)
-    in
-    (bindings,
-     List.map vars ~f:(pvar ~loc),
-     List.map vars ~f:(evar ~loc))
-end
 
 (* XXX: Temporary workaround, while ppx_core is fixing exception there *)
 exception Stop
@@ -604,7 +571,7 @@ module Jsobject_of_expander_2 = struct
                    let fname = Printf.sprintf "_of_%s" v in
                    {%expression| fun $lid:fname$ -> $rhs$ |})
                  pl rhs in
-     [{%value_binding| $lid:fname$ = $rhs$ |}]
+     [{%value_binding| $lid:fname$ v = $rhs$ v |}]
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
      let fname = name_of_tdname tname in
@@ -1122,7 +1089,7 @@ module Of_jsobject_expander_2 = struct
                    let fname = Printf.sprintf "_of_%s" v in
                    {%expression| fun $lid:fname$ -> $rhs$ |})
                  pl rhs in
-     [{%value_binding| $lid:fname$ = $rhs$ |}]
+     [{%value_binding| $lid:fname$ v = $rhs$ v |}]
 
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
