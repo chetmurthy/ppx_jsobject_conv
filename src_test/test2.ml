@@ -397,6 +397,9 @@ let () =
   should_parse "open type 1" "[\"OpV1\"]"
                ForOpen.open_type_of_jsobject
                ForOpen.jsobject_of_open_type;
+  should_parse "open type 2" "[\"OpV2\"]"
+               ForOpen.open_type_of_jsobject
+               ForOpen.jsobject_of_open_type;
   should_fail "invalid open type" "[\"Invalid\"]"
                ForOpen.open_type_of_jsobject
 
