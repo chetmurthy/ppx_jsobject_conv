@@ -982,16 +982,38 @@ module Jsobject_of_expander_2 = struct
                  pl rhs in
      [{%value_binding| $lid:fname$ = $rhs$ |}]
      
+  | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
+     let fname = name_of_tdname tname in
+     let fty = converter_type {%core_type| $lid:tname$ |} in
+     let default_fname = fname^"_default" in
+     let ref_name = fname^"_most_recent" in
+     [
+       {%value_binding|
+        ($lid:default_fname$ : $fty$) =
+            fun _ ->
+              throw_js_error
+                ("ppx_jsobject_conv: Maybe a [@@deriving jsobject] is missing when extending the type "
+                   ^ $string:tname$) |}
+     ; {%value_binding| $lid:ref_name$ = ref $lid:default_fname$ |}
+     ; {%value_binding| $lid:fname$ =
+            function | i -> (!) $lid:ref_name$ i
+        |}
+     ]
 
+     
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
     let rec_flag = really_recursive rec_flag tds in
     let bindings = tds |> List.concat_map td_to_jsobject_of in
     let bindings =
       bindings
-      |> List.map (fun
+      |> List.map (function
                {%value_binding.noattr.loc| $lid:fname$ = $e$ |} ->
-             let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
-             {%value_binding.noattr.loc| $lid:fname$ = $e$ |}) in
+                let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
+                {%value_binding.noattr.loc| $lid:fname$ = $e$ |}
+             | {%value_binding.noattr.loc| ($lid:fname$ : $ty$) = $e$ |} ->
+                let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
+                {%value_binding.noattr.loc| ($lid:fname$ : $ty$) = $e$ |}
+           ) in
     [{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
 
 end
@@ -2011,15 +2033,38 @@ module Of_jsobject_expander_2 = struct
                  pl rhs in
      [{%value_binding| $lid:fname$ = $rhs$ |}]
 
+  | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
+     let fname = name_of_tdname tname in
+     let fty = converter_type {%core_type| $lid:tname$ |} in
+     let default_fname = fname^"_default" in
+     let ref_name = fname^"_most_recent" in
+     [
+       {%value_binding|
+        ($lid:default_fname$ : $fty$) =
+            fun _ ->
+              Error
+                ("ppx_jsobject_conv: can't convert, maybe a [@@deriving jsobject] is missing when extending the type "
+                   ^ $string:tname$)
+        |}
+     ; {%value_binding| $lid:ref_name$ = ref $lid:default_fname$ |}
+     ; {%value_binding| $lid:fname$ =
+            function | i -> (!) $lid:ref_name$ i
+        |}
+     ]
+
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
     let rec_flag = really_recursive rec_flag tds in
     let bindings = tds |> List.concat_map td_to_of_jsobject in
     let bindings =
       bindings
-      |> List.map (fun
+      |> List.map (function
                {%value_binding.noattr.loc| $lid:fname$ = $e$ |} ->
              let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
-             {%value_binding.noattr.loc| $lid:fname$ = $e$ |}) in
+             {%value_binding.noattr.loc| $lid:fname$ = $e$ |}
+             | {%value_binding.noattr.loc| ($lid:fname$ : $ty$) = $e$ |} ->
+                let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
+                {%value_binding.noattr.loc| ($lid:fname$ : $ty$) = $e$ |}
+           ) in
     [{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
 
 end

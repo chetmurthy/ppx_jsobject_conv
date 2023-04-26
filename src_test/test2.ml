@@ -388,7 +388,6 @@ let () =
                drop_none_of_jsobject
                jsobject_of_drop_none
 
-(*
 module ForOpen = struct
   type open_type = .. [@@deriving jsobject]
 end
@@ -400,7 +399,6 @@ let () =
                ForOpen.jsobject_of_open_type;
   should_fail "invalid open type" "[\"Invalid\"]"
                ForOpen.open_type_of_jsobject
- *)
 
 let suite = Suite.(>:::) "conv" (List.rev !tests)
 
