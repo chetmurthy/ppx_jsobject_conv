@@ -77,11 +77,9 @@ type rec6 = {a: string option [@jsobject.drop_none] ; b: int option [@jsobject.d
                    [@@deriving jsobject]
 type drop_none = {some: string option [@jsobject.drop_none]}
                    [@@deriving jsobject]
-(*
+
 module ForOpen : sig
   type open_type = .. [@@deriving jsobject]
 end
 type ForOpen.open_type += OpV1 (* [@@deriving jsobject] *)
 type ForOpen.open_type += OpV2 (* [@@deriving jsobject] *)
-
- *)

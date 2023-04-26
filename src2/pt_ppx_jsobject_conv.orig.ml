@@ -313,13 +313,35 @@ module Jsobject_of_expander_2 = struct
         {%core_type| $converter_type pv$ -> $rhs_t$ |})
       pl rhs_t
 
+  let td_to_sig_items td =
+      match td with
+        {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:_$ |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
+         let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
+         let fun_type = List.fold_right (fun (pv, _) rhs_t ->
+                       {%core_type| $converter_type pv$ -> $rhs_t$ |})
+                     pl rhs_t in
+         let func_name = name_of_tdname tname in
+         [{%signature_item| val $lid:func_name$ : $fun_type$ |}]
+
+      | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
+         let fun_type = converter_type {%core_type| $lid:tname$ |} in
+         let func_name = name_of_tdname tname in
+         let default_fname = func_name^"_default" in
+         let ref_name = func_name^"_most_recent" in
+         [
+           {%signature_item| val $lid:default_fname$ : $fun_type$ |}
+         ; {%signature_item| val $lid:ref_name$ : $fun_type$ ref |}
+         ; {%signature_item| val $lid:func_name$ : $fun_type$ |}
+         ]
+
   let sig_type_decl ~loc:_ ~path:_ (_rf, tds) =
     tds
-    |> List.concat_map (fun td ->
-           let fun_type = td_to_fun_type td in
-           let func_name = name_of_td td in
-           let loc = td.ptype_loc in
-           [{%signature_item| val $lid:func_name$ : $fun_type$ |}])
+    |> List.concat_map td_to_sig_items
 
   let do_wrap_body cid e =
     let rec wraprec = function
@@ -720,28 +742,35 @@ module Of_jsobject_expander_2 = struct
     {%core_type| Js_of_ocaml.Js.Unsafe.any Js_of_ocaml.Js.t -> ($ty$, string) result |}
 
 
-  let td_to_fun_type td =
-    let (loc,  pl, tname) =
-      match td with
-        {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:_$ |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} -> (loc, pl, tname)
-    in
-    let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
-    List.fold_right (fun (pv, _) rhs_t ->
-        {%core_type| $converter_type pv$ -> $rhs_t$ |})
-      pl rhs_t
+  let td_to_sig_items td =
+    match td with
+        {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:_$ |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
+      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
+         let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
+         let fun_type = List.fold_right (fun (pv, _) rhs_t ->
+                            {%core_type| $converter_type pv$ -> $rhs_t$ |})
+                          pl rhs_t in
+         let func_name = name_of_tdname tname in
+         [{%signature_item| val $lid:func_name$ : $fun_type$ |}]
+
+      | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
+         let fun_type = converter_type {%core_type| $lid:tname$ |} in
+         let func_name = name_of_tdname tname in
+         let default_fname = func_name^"_default" in
+         let ref_name = func_name^"_most_recent" in
+         [
+           {%signature_item| val $lid:default_fname$ : $fun_type$ |}
+         ; {%signature_item| val $lid:ref_name$ : $fun_type$ ref |}
+         ; {%signature_item| val $lid:func_name$ : $fun_type$ |}
+         ]
 
   let sig_type_decl ~loc:_ ~path:_ (_rf, tds) =
     tds
-    |> List.concat_map (fun td ->
-           let fun_type = td_to_fun_type td in
-           let func_name = name_of_td td in
-           let loc = td.ptype_loc in
-           [{%signature_item| val $lid:func_name$ : $fun_type$ |}])
+    |> List.concat_map td_to_sig_items
 
   let wrap_polyvariant ~loc cid body =
     {%expression| ` $id:cid$ $body$ |}
