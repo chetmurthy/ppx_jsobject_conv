@@ -825,7 +825,7 @@ module Jsobject_of_expander_2 = struct
               {%case.noattr.loc| $patt$ -> $body$ |}) 
 
   and record_type_to_jsobject_of ?(modify_pattern = (fun x -> x)) ~loc rho ll =
-    let field_name_var_longid_patt_conv_list =
+    let field_name_var_longid_patt_conv_dropnone_list =
       ll
       |> List.map (function
                {%label_declaration.noattr.loc| $mutable:_$ $lid:fldname$ : $fldty$ |} as ld ->
@@ -834,16 +834,26 @@ module Jsobject_of_expander_2 = struct
                let patt = {%pattern| $lid:var$ |} in
                let conv = core_type_to_jsobject_of rho fldty in
                let jsfldname = Attrs.field_name ld in
-               (jsfldname, var, longid, patt, conv)) in
+               let drop_none = Attrs.should_drop_none ld in
+               (jsfldname, var, longid, patt, conv, drop_none)) in
     let pattfields = 
-      field_name_var_longid_patt_conv_list
-      |> List.map (fun (_,_,li,p,_) -> (li,p)) in
+      field_name_var_longid_patt_conv_dropnone_list
+      |> List.map (fun (_,_,li,p,_,_) -> (li,p)) in
     let patt = {%pattern| { $list:pattfields$ } |} in
     let patt = modify_pattern patt in
     let jstuples =
-      field_name_var_longid_patt_conv_list
-      |> List.map (fun (jsfldname,var,_,_,conv) ->
-             {%expression| Some ($string:jsfldname$, ((function $list:conv$) $lid:var$)) |}) in
+      field_name_var_longid_patt_conv_dropnone_list
+      |> List.map (fun (jsfldname,var,_,_,conv,dropnone) ->
+             if dropnone then
+               {%expression|
+                (match $lid:var$ with
+                 | Some _ ->
+                    Some ($string:jsfldname$, ((function $list:conv$) $lid:var$))
+                 | None -> None)
+                |}
+             else
+               {%expression| Some ($string:jsfldname$, ((function $list:conv$) $lid:var$)) |}
+           ) in
     {%case| $patt$ -> make_jsobject_of_some [| $list:jstuples$ |] |}
 
   and variant_type_to_jsobject_of ~loc ?(polyvariant=false) rho cl =

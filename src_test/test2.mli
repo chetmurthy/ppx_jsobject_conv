@@ -73,9 +73,11 @@ type tagless =  U2 of {inlinef: float; inlines: string}
                            [@@deriving jsobject]
 type rec5 = A of (int * bool) [@jsobject.sum_type_as "object"]
           | B of { x : int * bool } [@@deriving jsobject]
-(*
+type rec6 = {a: string option [@jsobject.drop_none] ; b: int option [@jsobject.drop_none]}
+                   [@@deriving jsobject]
 type drop_none = {some: string option [@jsobject.drop_none]}
                    [@@deriving jsobject]
+(*
 module ForOpen : sig
   type open_type = .. [@@deriving jsobject]
 end

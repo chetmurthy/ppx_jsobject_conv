@@ -373,7 +373,10 @@ let () = should_parse "rec5 A" {|{"A":[1,true]}|}
 let () = should_parse "rec5 B" {|{"B":{"x":[1,true]}}|}
                       rec5_of_jsobject
                       jsobject_of_rec5
-(*
+type rec6 = {a: string option [@jsobject.drop_none] ; b: int option [@jsobject.drop_none]}
+                   [@@deriving jsobject]
+type rec6' = {a: string option ; b: int option}
+                   [@@deriving jsobject]
 type drop_none = {some: string option [@jsobject.drop_none]}
                    [@@deriving jsobject]
 let () =
@@ -385,6 +388,7 @@ let () =
                drop_none_of_jsobject
                jsobject_of_drop_none
 
+(*
 module ForOpen = struct
   type open_type = .. [@@deriving jsobject]
 end
