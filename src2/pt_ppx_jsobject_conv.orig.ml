@@ -265,16 +265,7 @@ module Jsobject_of_expander_2 = struct
     let loc = match ty with {%core_type.noattr.loc| $_$ |} -> loc in
     {%core_type| $ty$ -> Js_of_ocaml.Js.Unsafe.any Js_of_ocaml.Js.t |}
 
-  let td_to_fun_type td =
-    let (loc,  pl, tname) =
-      match td with
-        {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:_$ |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |} -> (loc, pl, tname)
-      | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} -> (loc, pl, tname)
-    in
+  let fun_type ~loc pl tname =
     let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
     List.fold_right (fun (pv, _) rhs_t ->
         {%core_type| $converter_type pv$ -> $rhs_t$ |})
@@ -288,10 +279,7 @@ module Jsobject_of_expander_2 = struct
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
-         let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
-         let fun_type = List.fold_right (fun (pv, _) rhs_t ->
-                       {%core_type| $converter_type pv$ -> $rhs_t$ |})
-                     pl rhs_t in
+         let fun_type = fun_type ~loc pl tname in
          let func_name = name_of_tdname tname in
          [{%signature_item| val $lid:func_name$ : $fun_type$ |}]
 
@@ -709,6 +697,12 @@ module Of_jsobject_expander_2 = struct
     {%core_type| Js_of_ocaml.Js.Unsafe.any Js_of_ocaml.Js.t -> ($ty$, string) result |}
 
 
+  let fun_type ~loc pl tname =
+    let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
+    List.fold_right (fun (pv, _) rhs_t ->
+        {%core_type| $converter_type pv$ -> $rhs_t$ |})
+      pl rhs_t
+
   let td_to_sig_items td =
     match td with
         {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |}
@@ -717,10 +711,7 @@ module Of_jsobject_expander_2 = struct
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
-         let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
-         let fun_type = List.fold_right (fun (pv, _) rhs_t ->
-                            {%core_type| $converter_type pv$ -> $rhs_t$ |})
-                          pl rhs_t in
+         let fun_type = fun_type ~loc pl tname in
          let func_name = name_of_tdname tname in
          [{%signature_item| val $lid:func_name$ : $fun_type$ |}]
 
