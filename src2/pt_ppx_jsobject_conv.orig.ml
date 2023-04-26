@@ -906,10 +906,13 @@ module Jsobject_of_expander_2 = struct
                let conv_cases = core_type_to_jsobject_of rho ty in
                let conv = {%expression| function $list:conv_cases$ |} in
                {%case| $uid:cid$ v -> let v = $conv$ v in make_jsobject [|($string:jscid$, v)|] |}
-(*
+
             | {%constructor_declaration.noattr.loc| $uid:cid$ of { $list:ll$ } |} ->
-               record_type_to_jsobject_of ~loc ~modify_pattern:(modify_pattern ~polyvariant:false ~loc cid) rho ll
- *)
+               (match record_type_to_jsobject_of ~loc ~modify_pattern:(modify_pattern ~polyvariant:false ~loc cid) rho ll with
+                  {%case| $patt$ -> $expr$ |} ->
+                  {%case|
+                   $patt$ -> let v = $expr$ in make_jsobject [|($string:jscid$, v)|] |})
+
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %a" Std_derivers.pp_constructor_declaration cd)
           )
@@ -1869,6 +1872,7 @@ module Of_jsobject_expander_2 = struct
                  else
                    {%expression| Ok $uid:cid$ |} in
                (jscid, rhs)
+
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $ty$ |} ->
                let conv = core_type_to_of_jsobject rho ty in
                let body =
@@ -1886,6 +1890,19 @@ module Of_jsobject_expander_2 = struct
                     >>= (fun v0 -> Ok $body$)))
                 |} in
                (jscid, rhs)
+
+            | {%constructor_declaration.noattr.loc| $uid:cid$ of { $list:ll$ } |} ->
+               let conv = record_type_to_of_jsobject ~modify_body:(wrap_constructor ~loc cid) ~loc rho ll in
+               let rhs = {%expression|
+                (object_get_key obj $string:jscid$) >>=
+                  ((fun v ->
+                    (($conv$ v) >*=
+                       (fun emsg ->
+                         concat_error_messages $string:jscid$ emsg))
+                    >>= (fun v0 -> Ok v0)))
+                |} in
+               (jscid, rhs)
+
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
                failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %a" Std_derivers.pp_constructor_declaration cd)
              ) in

@@ -71,6 +71,8 @@ type rec4 = A of (int * bool) [@jsobject.sum_type_as "tagless"]
 type tagless =  U2 of {inlinef: float; inlines: string}
               | U1 of user [@jsobject.sum_type_as "tagless"]
                            [@@deriving jsobject]
+type rec5 = A of (int * bool) [@jsobject.sum_type_as "object"]
+          | B of { x : int * bool } [@@deriving jsobject]
 (*
 type drop_none = {some: string option [@jsobject.drop_none]}
                    [@@deriving jsobject]
