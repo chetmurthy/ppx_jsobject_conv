@@ -279,21 +279,21 @@ module Jsobject_of_expander_2 = struct
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
-         let fun_type = fun_type ~loc pl tname in
+         let ftype = fun_type ~loc pl tname in
          let func_name = name_of_tdname tname in
-         [{%signature_item| val $lid:func_name$ : $fun_type$ |}]
+         [{%signature_item| val $lid:func_name$ : $ftype$ |}]
 
       | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
-         let fun_type = converter_type {%core_type| $lid:tname$ |} in
+         let ftype = converter_type {%core_type| $lid:tname$ |} in
          let func_name = name_of_tdname tname in
          let default_fname = func_name^"_default" in
          let ref_type_name = func_name^"_ref_t" in
          let ref_name = func_name^"_ref" in
          [
-           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $fun_type$ }|}
-         ; {%signature_item| val $lid:default_fname$ : $fun_type$ |}
+           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $ftype$ }|}
+         ; {%signature_item| val $lid:default_fname$ : $ftype$ |}
          ; {%signature_item| val $lid:ref_name$ : $lid:ref_type_name$ |}
-         ; {%signature_item| val $lid:func_name$ : $fun_type$ |}
+         ; {%signature_item| val $lid:func_name$ : $ftype$ |}
          ]
 
   let sig_type_decl ~loc:_ ~path:_ (_rf, tds) =
@@ -550,9 +550,9 @@ module Jsobject_of_expander_2 = struct
 
   let wrapper_with_fun_type ~loc pl tname = function
       {%value_binding| $lid:f$ = $e$ |} ->
-      let fun_type = fun_type ~loc pl tname in
+      let ftype = fun_type ~loc pl tname in
       let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
-      {%value_binding| $lid:f$ : $list:tvl$ . $fun_type$ = $e$ |} 
+      {%value_binding| $lid:f$ : $list:tvl$ . $ftype$ = $e$ |} 
 
   let wrapper_with_newtype ~loc pl rhs =
     List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
@@ -729,21 +729,21 @@ module Of_jsobject_expander_2 = struct
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
-         let fun_type = fun_type ~loc pl tname in
+         let ftype = fun_type ~loc pl tname in
          let func_name = name_of_tdname tname in
-         [{%signature_item| val $lid:func_name$ : $fun_type$ |}]
+         [{%signature_item| val $lid:func_name$ : $ftype$ |}]
 
       | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
-         let fun_type = converter_type {%core_type| $lid:tname$ |} in
+         let ftype = converter_type {%core_type| $lid:tname$ |} in
          let func_name = name_of_tdname tname in
          let default_fname = func_name^"_default" in
          let ref_type_name = func_name^"_ref_t" in
          let ref_name = func_name^"_ref" in
          [
-           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $fun_type$ }|}
-         ; {%signature_item| val $lid:default_fname$ : $fun_type$ |}
+           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $ftype$ }|}
+         ; {%signature_item| val $lid:default_fname$ : $ftype$ |}
          ; {%signature_item| val $lid:ref_name$ : $lid:ref_type_name$ |}
-         ; {%signature_item| val $lid:func_name$ : $fun_type$ |}
+         ; {%signature_item| val $lid:func_name$ : $ftype$ |}
          ]
 
   let sig_type_decl ~loc:_ ~path:_ (_rf, tds) =
@@ -1090,9 +1090,9 @@ module Of_jsobject_expander_2 = struct
 
   let wrapper_with_fun_type ~loc pl tname = function
       {%value_binding| $lid:f$ = $e$ |} ->
-      let fun_type = fun_type ~loc pl tname in
+      let ftype = fun_type ~loc pl tname in
       let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
-      {%value_binding| $lid:f$ : $list:tvl$ . $fun_type$ = $e$ |} 
+      {%value_binding| $lid:f$ : $list:tvl$ . $ftype$ = $e$ |} 
 
   let wrapper_with_newtype ~loc pl rhs =
     List.fold_right (fun ({%core_type.noattr.loc| ' $lid:v$ |}, _) rhs ->
