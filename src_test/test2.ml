@@ -403,6 +403,19 @@ let () =
   should_fail "invalid open type" "[\"Invalid\"]"
                ForOpen.open_type_of_jsobject
 
+module M = struct
+  type ('a, 'b) choice = .. [@@deriving jsobject]
+end
+type ('a, 'b) M.choice += Left of 'a [@@deriving jsobject]
+type ('a, 'b) M.choice += Right of 'b [@@deriving jsobject]
+type xx4c = (int, string) M.choice [@@deriving jsobject]
+let () = should_parse "xx4c left" {|["Left",4]|}
+                      xx4c_of_jsobject
+                      jsobject_of_xx4c
+let () = should_parse "xx4c right" {|["Right","foo"]|}
+                      xx4c_of_jsobject
+                      jsobject_of_xx4c
+
 let suite = Suite.(>:::) "conv" (List.rev !tests)
 
 let () =
