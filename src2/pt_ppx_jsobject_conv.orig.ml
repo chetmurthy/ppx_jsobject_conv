@@ -250,6 +250,13 @@ let constrained_function_binding = fun
   in
   value_binding ~loc ~pat ~expr:body
 
+
+let suppress_unused_rec bindings =
+  match bindings with
+    [] ->  assert false
+  | {%value_binding.noattr.loc| $patt$ = $expr$ |}::t ->
+     {%value_binding.loc| $patt$ = $expr$ [@@ocaml.warning "-39"] |}::t
+
 module Jsobject_of_expander_2 = struct
   open Stdlib
   open Parsetree
@@ -633,10 +640,10 @@ module Jsobject_of_expander_2 = struct
       ])
      
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
-    let rec_flag = really_recursive rec_flag tds in
     let l = tds |> List.map td_to_jsobject_of in
     let stril = List.concat_map fst l in
     let bindings = List.concat_map snd l in
+    let bindings = suppress_unused_rec bindings in
     stril@[{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
 
   let str_type_ext ~loc ~path:_ te =
@@ -1173,10 +1180,10 @@ module Of_jsobject_expander_2 = struct
      ])
 
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
-    let rec_flag = really_recursive rec_flag tds in
     let l = tds |> List.map td_to_of_jsobject in
     let stril = List.concat_map fst l in
     let bindings = List.concat_map snd l in
+    let bindings = suppress_unused_rec bindings in
     stril@[{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
 
   let str_type_ext ~loc ~path:_ te =
