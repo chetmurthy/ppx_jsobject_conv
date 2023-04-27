@@ -274,9 +274,12 @@ module Jsobject_of_expander_2 = struct
 
   let fun_type ~loc pl tname =
     let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
-    List.fold_right (fun (pv, _) rhs_t ->
-        {%core_type| $converter_type pv$ -> $rhs_t$ |})
-      pl rhs_t
+    let ftype =
+      List.fold_right (fun (pv, _) rhs_t ->
+          {%core_type| $converter_type pv$ -> $rhs_t$ |})
+        pl rhs_t in
+    let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
+    (tvl, ftype)
 
   let td_to_sig_items td =
       match td with
@@ -286,18 +289,18 @@ module Jsobject_of_expander_2 = struct
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
-         let ftype = fun_type ~loc pl tname in
+         let (tvl,ftype) = fun_type ~loc pl tname in
          let func_name = name_of_tdname tname in
-         [{%signature_item| val $lid:func_name$ : $ftype$ |}]
+         [{%signature_item| val $lid:func_name$ : $list:tvl$ . $ftype$ |}]
 
       | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
-         let ftype = converter_type {%core_type| $lid:tname$ |} in
+         let (tvl, ftype) = fun_type ~loc [] tname in
          let func_name = name_of_tdname tname in
          let default_fname = func_name^"_default" in
          let ref_type_name = func_name^"_ref_t" in
          let ref_name = func_name^"_ref" in
          [
-           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $ftype$ }|}
+           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $list:tvl$ . $ftype$ }|}
          ; {%signature_item| val $lid:default_fname$ : $ftype$ |}
          ; {%signature_item| val $lid:ref_name$ : $lid:ref_type_name$ |}
          ; {%signature_item| val $lid:func_name$ : $ftype$ |}
@@ -557,8 +560,7 @@ module Jsobject_of_expander_2 = struct
 
   let wrapper_with_fun_type ~loc pl tname = function
       {%value_binding| $lid:f$ = $e$ |} ->
-      let ftype = fun_type ~loc pl tname in
-      let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
+      let (tvl, ftype) = fun_type ~loc pl tname in
       {%value_binding| $lid:f$ : $list:tvl$ . $ftype$ = $e$ |} 
 
   let wrapper_with_newtype ~loc pl rhs =
@@ -618,11 +620,11 @@ module Jsobject_of_expander_2 = struct
      
   | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
      let fname = name_of_tdname tname in
-     let fty = converter_type {%core_type| $lid:tname$ |} in
+     let (tvl, fty) = fun_type ~loc [] tname in
      let default_fname = fname^"_default" in
      let ref_type_name = fname^"_ref_t" in
      let ref_name = fname^"_ref" in
-     ([{%structure_item| type $lid:ref_type_name$ = { mutable $lid:fname$ : $fty$ }|}],
+     ([{%structure_item| type $lid:ref_type_name$ = { mutable $lid:fname$ : $list:tvl$ . $fty$ }|}],
       [
         {%value_binding|
          ($lid:default_fname$ : $fty$) =
@@ -721,12 +723,14 @@ module Of_jsobject_expander_2 = struct
     let loc = match ty with {%core_type.noattr.loc| $_$ |} -> loc in
     {%core_type| Js_of_ocaml.Js.Unsafe.any Js_of_ocaml.Js.t -> ($ty$, string) result |}
 
-
   let fun_type ~loc pl tname =
     let rhs_t = converter_type {%core_type| $list:List.map fst pl$ $lid:tname$ |} in
-    List.fold_right (fun (pv, _) rhs_t ->
-        {%core_type| $converter_type pv$ -> $rhs_t$ |})
-      pl rhs_t
+    let ftype =
+      List.fold_right (fun (pv, _) rhs_t ->
+          {%core_type| $converter_type pv$ -> $rhs_t$ |})
+        pl rhs_t in
+    let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
+    (tvl, ftype)
 
   let td_to_sig_items td =
     match td with
@@ -736,18 +740,18 @@ module Of_jsobject_expander_2 = struct
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
-         let ftype = fun_type ~loc pl tname in
+         let (tvl, ftype) = fun_type ~loc pl tname in
          let func_name = name_of_tdname tname in
-         [{%signature_item| val $lid:func_name$ : $ftype$ |}]
+         [{%signature_item| val $lid:func_name$ : $list:tvl$ . $ftype$ |}]
 
       | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
-         let ftype = converter_type {%core_type| $lid:tname$ |} in
+         let (tvl, ftype) = fun_type ~loc [] tname in
          let func_name = name_of_tdname tname in
          let default_fname = func_name^"_default" in
          let ref_type_name = func_name^"_ref_t" in
          let ref_name = func_name^"_ref" in
          [
-           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $ftype$ }|}
+           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $list:tvl$ . $ftype$ }|}
          ; {%signature_item| val $lid:default_fname$ : $ftype$ |}
          ; {%signature_item| val $lid:ref_name$ : $lid:ref_type_name$ |}
          ; {%signature_item| val $lid:func_name$ : $ftype$ |}
@@ -1097,8 +1101,7 @@ module Of_jsobject_expander_2 = struct
 
   let wrapper_with_fun_type ~loc pl tname = function
       {%value_binding| $lid:f$ = $e$ |} ->
-      let ftype = fun_type ~loc pl tname in
-      let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
+      let (tvl,ftype) = fun_type ~loc pl tname in
       {%value_binding| $lid:f$ : $list:tvl$ . $ftype$ = $e$ |} 
 
   let wrapper_with_newtype ~loc pl rhs =
@@ -1157,11 +1160,11 @@ module Of_jsobject_expander_2 = struct
 
   | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
      let fname = name_of_tdname tname in
-     let fty = converter_type {%core_type| $lid:tname$ |} in
+     let (tvl, fty) = fun_type ~loc [] tname in
      let default_fname = fname^"_default" in
      let ref_type_name = fname^"_ref_t" in
      let ref_name = fname^"_ref" in
-     ([{%structure_item| type $lid:ref_type_name$ = { mutable $lid:fname$ : $fty$ }|}],
+     ([{%structure_item| type $lid:ref_type_name$ = { mutable $lid:fname$ : $list:tvl$ . $fty$ }|}],
       [
         {%value_binding|
          $lid:default_fname$ : $fty$ =
