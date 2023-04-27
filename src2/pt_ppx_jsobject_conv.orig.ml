@@ -287,10 +287,12 @@ module Jsobject_of_expander_2 = struct
          let fun_type = converter_type {%core_type| $lid:tname$ |} in
          let func_name = name_of_tdname tname in
          let default_fname = func_name^"_default" in
-         let ref_name = func_name^"_most_recent" in
+         let ref_type_name = func_name^"_ref_t" in
+         let ref_name = func_name^"_ref" in
          [
-           {%signature_item| val $lid:default_fname$ : $fun_type$ |}
-         ; {%signature_item| val $lid:ref_name$ : $fun_type$ ref |}
+           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $fun_type$ }|}
+         ; {%signature_item| val $lid:default_fname$ : $fun_type$ |}
+         ; {%signature_item| val $lid:ref_name$ : $lid:ref_type_name$ |}
          ; {%signature_item| val $lid:func_name$ : $fun_type$ |}
          ]
 
@@ -573,7 +575,7 @@ module Jsobject_of_expander_2 = struct
       pl rhs
 
   let td_to_jsobject_of = function
-    {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
+    {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> ([],[])
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $ty$ |} ->
      let fname = name_of_tdname tname in
      let rho = build_rho pl in
@@ -581,8 +583,9 @@ module Jsobject_of_expander_2 = struct
      let rhs = {%expression| function $list:cases$ |} in
      let rhs = prepend_params pl rhs in
      let rhs = wrapper_with_newtype ~loc pl rhs in
-     [wrapper_with_fun_type ~loc pl tname
-        {%value_binding| $lid:fname$ v = let open! Ppx_jsobject_conv_runtime in $rhs$ v |}]
+     ([],
+      [wrapper_with_fun_type ~loc pl tname
+         {%value_binding| $lid:fname$ v = let open! Ppx_jsobject_conv_runtime in $rhs$ v |}])
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
      let fname = name_of_tdname tname in
@@ -591,8 +594,9 @@ module Jsobject_of_expander_2 = struct
      let rhs = {%expression| function $list:cases$ |} in
      let rhs = prepend_params pl rhs in
      let rhs = wrapper_with_newtype ~loc pl rhs in
-     [wrapper_with_fun_type ~loc pl tname
-        {%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
+     ([],
+      [wrapper_with_fun_type ~loc pl tname
+         {%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}])
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:ll$ } |} ->
      let fname = name_of_tdname tname in
@@ -601,40 +605,45 @@ module Jsobject_of_expander_2 = struct
      let rhs = {%expression| function $list:[case]$ |} in
      let rhs = prepend_params pl rhs in
      let rhs = wrapper_with_newtype ~loc pl rhs in
-     [wrapper_with_fun_type ~loc pl tname
-        {%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
+     ([],
+      [wrapper_with_fun_type ~loc pl tname
+         {%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}])
      
   | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
      let fname = name_of_tdname tname in
      let fty = converter_type {%core_type| $lid:tname$ |} in
      let default_fname = fname^"_default" in
-     let ref_name = fname^"_most_recent" in
-     [
-       {%value_binding|
-        ($lid:default_fname$ : $fty$) =
-            let open! Ppx_jsobject_conv_runtime in 
-            fun _ ->
-              throw_js_error
-                ("ppx_jsobject_conv: Maybe a [@@deriving jsobject] is missing when extending the type "
-                   ^ $string:tname$) |}
-     ; {%value_binding| $lid:ref_name$ = let open! Ppx_jsobject_conv_runtime in ref $lid:default_fname$ |}
-     ; {%value_binding| $lid:fname$ =
-            let open! Ppx_jsobject_conv_runtime in 
-            function | i -> (!) $lid:ref_name$ i
-        |}
-     ]
-
+     let ref_type_name = fname^"_ref_t" in
+     let ref_name = fname^"_ref" in
+     ([{%structure_item| type $lid:ref_type_name$ = { mutable $lid:fname$ : $fty$ }|}],
+      [
+        {%value_binding|
+         ($lid:default_fname$ : $fty$) =
+           let open! Ppx_jsobject_conv_runtime in 
+           fun _ ->
+           throw_js_error
+             ("ppx_jsobject_conv: Maybe a [@@deriving jsobject] is missing when extending the type "
+              ^ $string:tname$) |}
+      ; {%value_binding| $lid:ref_name$ = let open! Ppx_jsobject_conv_runtime in
+          { $lid:fname$ =  $lid:default_fname$ } |}
+      ; {%value_binding| $lid:fname$ =
+                                let open! Ppx_jsobject_conv_runtime in 
+                                function | i -> $lid:ref_name$ . $lid:fname$ i
+                                         |}
+      ])
      
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
     let rec_flag = really_recursive rec_flag tds in
-    let bindings = tds |> List.concat_map td_to_jsobject_of in
-    [{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
+    let l = tds |> List.map td_to_jsobject_of in
+    let stril = List.concat_map fst l in
+    let bindings = List.concat_map snd l in
+    stril@[{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
 
   let str_type_ext ~loc ~path:_ te =
     match te with
       {%str_type_extension.noattr.loc| type $longid:modli$ . $lid:tname$ += $list:exconl$ |} ->
      let fname = name_of_tdname tname in
-     let ref_name = fname^"_most_recent" in
+     let ref_name = fname^"_ref" in
      let previous_fname = fname^"_previous" in
      let cl =
        exconl
@@ -651,14 +660,14 @@ module Jsobject_of_expander_2 = struct
      let fbody = {%expression| function $list:cases$ |} in
     [
       {%structure_item|
-       let rec $lid:previous_fname$ = ! $longid:modli$ . $lid:ref_name$
+       let rec $lid:previous_fname$ = $longid:modli$ . $lid:ref_name$ . $lid:fname$
        and $lid:fname$ =
          let open! Ppx_jsobject_conv_runtime in
          $fbody$
        |}
       ; {%structure_item|
          let () =
-           $longid:modli$ . $lid:ref_name$ := $lid:fname$
+           $longid:modli$ . $lid:ref_name$ . $lid:fname$ <- $lid:fname$
          |}
     ]
 
@@ -728,10 +737,12 @@ module Of_jsobject_expander_2 = struct
          let fun_type = converter_type {%core_type| $lid:tname$ |} in
          let func_name = name_of_tdname tname in
          let default_fname = func_name^"_default" in
-         let ref_name = func_name^"_most_recent" in
+         let ref_type_name = func_name^"_ref_t" in
+         let ref_name = func_name^"_ref" in
          [
-           {%signature_item| val $lid:default_fname$ : $fun_type$ |}
-         ; {%signature_item| val $lid:ref_name$ : $fun_type$ ref |}
+           {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $fun_type$ }|}
+         ; {%signature_item| val $lid:default_fname$ : $fun_type$ |}
+         ; {%signature_item| val $lid:ref_name$ : $lid:ref_type_name$ |}
          ; {%signature_item| val $lid:func_name$ : $fun_type$ |}
          ]
 
@@ -1104,7 +1115,7 @@ module Of_jsobject_expander_2 = struct
       pl rhs
 
   let td_to_of_jsobject = function
-    {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> []
+    {%type_decl.noattr.loc| $list:pl$ $lid:tname$ |} -> ([],[])
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $ty$ |} ->
      let fname = name_of_tdname tname in
      let rho = build_rho pl in
@@ -1112,8 +1123,9 @@ module Of_jsobject_expander_2 = struct
      let rhs = {%expression| fun v -> $rhs$ v |} in
      let rhs = prepend_params pl rhs in
      let rhs = wrapper_with_newtype ~loc pl rhs in
-     [wrapper_with_fun_type ~loc pl tname
-        {%value_binding| $lid:fname$ =  let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
+     ([],
+      [wrapper_with_fun_type ~loc pl tname
+         {%value_binding| $lid:fname$ =  let open! Ppx_jsobject_conv_runtime in $rhs$ |}])
 
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $constructorlist:cl$ |} ->
@@ -1123,8 +1135,9 @@ module Of_jsobject_expander_2 = struct
      let rhs = {%expression| function $list:cases$ |} in
      let rhs = prepend_params pl rhs in
      let rhs = wrapper_with_newtype ~loc pl rhs in
-     [wrapper_with_fun_type ~loc pl tname
-        {%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
+     ([],
+      [wrapper_with_fun_type ~loc pl tname
+         {%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}])
 
   | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:ll$ } |} ->
      let fname = name_of_tdname tname in
@@ -1132,51 +1145,45 @@ module Of_jsobject_expander_2 = struct
      let rhs = record_type_to_of_jsobject ~loc rho ll in
      let rhs = prepend_params pl rhs in
      let rhs = wrapper_with_newtype ~loc pl rhs in
-     [{%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}]
+     ([],
+      [{%value_binding| $lid:fname$ = let open! Ppx_jsobject_conv_runtime in $rhs$ |}])
 
   | {%type_decl.noattr.loc| $lid:tname$ = .. |} ->
      let fname = name_of_tdname tname in
      let fty = converter_type {%core_type| $lid:tname$ |} in
      let default_fname = fname^"_default" in
-     let ref_name = fname^"_most_recent" in
-     [
-       {%value_binding|
-        $lid:default_fname$ : $fty$ =
-            let open! Ppx_jsobject_conv_runtime in 
-            fun _ ->
-              Error
-                ("ppx_jsobject_conv: can't convert, maybe a [@@deriving jsobject] is missing when extending the type "
-                   ^ $string:tname$)
-        |}
-     ; {%value_binding| $lid:ref_name$ = let open! Ppx_jsobject_conv_runtime in ref $lid:default_fname$ |}
-     ; {%value_binding| $lid:fname$ =
-            let open! Ppx_jsobject_conv_runtime in 
-            function | i -> (!) $lid:ref_name$ i
-        |}
-     ]
+     let ref_type_name = fname^"_ref_t" in
+     let ref_name = fname^"_ref" in
+     ([{%structure_item| type $lid:ref_type_name$ = { mutable $lid:fname$ : $fty$ }|}],
+      [
+        {%value_binding|
+         $lid:default_fname$ : $fty$ =
+                                 let open! Ppx_jsobject_conv_runtime in 
+                                 fun _ ->
+                                 Error
+                                   ("ppx_jsobject_conv: can't convert, maybe a [@@deriving jsobject] is missing when extending the type "
+                                    ^ $string:tname$)
+         |}
+      ; {%value_binding| $lid:ref_name$ = let open! Ppx_jsobject_conv_runtime in
+          { $lid:fname$ =  $lid:default_fname$ } |}
+      ; {%value_binding| $lid:fname$ =
+                                let open! Ppx_jsobject_conv_runtime in 
+                                function | i -> $lid:ref_name$ . $lid:fname$ i
+                                         |}
+     ])
 
   let str_type_decl ~loc ~path:_ (rec_flag, tds) =
     let rec_flag = really_recursive rec_flag tds in
-    let bindings = tds |> List.concat_map td_to_of_jsobject in
-(*
-    let bindings =
-      bindings
-      |> List.map (function
-               {%value_binding.noattr.loc| $lid:fname$ = $e$ |} ->
-                let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
-                {%value_binding.noattr.loc| $lid:fname$ = $e$ |}
-             | {%value_binding.noattr.loc| ( $lid:fname$ : $ty$ ) = $e$ |} ->
-                let e = {%expression| let open! Ppx_jsobject_conv_runtime in $e$ |} in
-                {%value_binding.noattr.loc| ($lid:fname$ : $ty$) = $e$ |}
-           ) in
- *)
-    [{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
+    let l = tds |> List.map td_to_of_jsobject in
+    let stril = List.concat_map fst l in
+    let bindings = List.concat_map snd l in
+    stril@[{%structure_item| let $recflag:rec_flag$ $list:bindings$ |}]
 
   let str_type_ext ~loc ~path:_ te =
     match te with
       {%str_type_extension.noattr.loc| type $longid:modli$ . $lid:tname$ += $list:exconl$ |} ->
      let fname = name_of_tdname tname in
-     let ref_name = fname^"_most_recent" in
+     let ref_name = fname^"_ref" in
      let previous_fname = fname^"_previous" in
      let cl =
        exconl
@@ -1197,12 +1204,12 @@ module Of_jsobject_expander_2 = struct
                   |} in
     [
       {%structure_item|
-       let rec $lid:previous_fname$ = ! $longid:modli$ . $lid:ref_name$
+       let rec $lid:previous_fname$ = $longid:modli$ . $lid:ref_name$ . $lid:fname$
        and $lid:fname$ = $fbody$      
                     |}
       ; {%structure_item|
          let () =
-           $longid:modli$ . $lid:ref_name$ := $lid:fname$
+           $longid:modli$ . $lid:ref_name$ . $lid:fname$ <- $lid:fname$
          |}
     ]
 
