@@ -4,7 +4,7 @@
   (kind ppx_deriver)
   (ppx_runtime_libraries ppx_jsobject_conv.runtime)
   (flags :standard -safe-string)
-  (libraries ppxlib pa_ppx_parsetree.helpers fmt)
+  (libraries ppxlib fmt)
   (preprocess (pps ppxlib.metaquot)))
 
 (rule
@@ -14,5 +14,5 @@
    )
  (action
  (with-stdout-to %{target}
-  (run not-ocamlfind preprocess -package fmt,unix,camlp5,ounit2,pa_ppx.utils,pa_ppx_parsetree.helpers,camlp5.pr_dump -package pa_ppx.deriving_plugins.std,pa_ppx_parsetree.quotations,pa_ppx_quotation2extension -syntax camlp5o  %{src})
+  (run not-ocamlfind preprocess -package fmt,unix,camlp5,ounit2,pa_ppx.utils,camlp5.pr_dump -package pa_ppx.deriving_plugins.std,pa_ppx_parsetree.quotations,pa_ppx_quotation2extension -syntax camlp5o  %{src})
   )))

@@ -1,6 +1,5 @@
 module L = List
 open StdLabels
-open Pa_ppx_parsetree_helpers
 
 let convert_down_list_expr f e =
   let rec crec acc = function
@@ -8,7 +7,7 @@ let convert_down_list_expr f e =
     | {%expression| $h$ :: $tl$ |} ->
        crec (f h :: acc) tl
     | _ -> failwith Fmt.(str "convert_down_list_expr: malformed list-expression %a"
-                           Std_derivers.pp_expression e)
+                           Pprintast.expression e)
   in
   crec [] e
 
@@ -281,7 +280,7 @@ module Jsobject_of_expander_2 = struct
         {%core_type.noattr.loc| ' $lid:v$ |} ->
         let f = match List.assoc v rho with
             exception Not_found ->
-             failwith Fmt.(str "core_type_to_jsobject_of: unknown type-var %a" Std_derivers.pp_core_type ty)
+             failwith Fmt.(str "core_type_to_jsobject_of: unknown type-var %a" Pprintast.core_type ty)
           | x -> x in
          [{%case| v -> $f$ v |}]
 
@@ -331,13 +330,13 @@ module Jsobject_of_expander_2 = struct
            rfl
            |> List.map (function
                     {%row_field| $_$ |} ->
-                     failwith Fmt.(str "jsobject_of: variant cannot include inheritance: %a" Std_derivers.pp_core_type ty)
+                     failwith Fmt.(str "jsobject_of: variant cannot include inheritance: %a" Pprintast.core_type ty)
                   | {%row_field.noattr.loc| ` $id:cid$ |} ->
                      {%constructor_declaration| $uid:cid$ |}
                   | {%row_field.noattr.loc| ` $id:cid$ of $ty$ |} ->
                      {%constructor_declaration| $uid:cid$ of $ty$ |}
                   | rf ->
-                     failwith Fmt.(str "jsobject_of: unrecognized row_field: %a" Std_derivers.pp_row_field rf)
+                     failwith Fmt.(str "jsobject_of: unrecognized row_field in type %a" Pprintast.core_type ty)
                 ) in
          variant_type_to_jsobject_of ~loc ~polyvariant:true rho cl
 
@@ -361,7 +360,7 @@ module Jsobject_of_expander_2 = struct
                       var_patt_expr_conv_list rhs in
          [{%case| $patt$ -> $body$ |}]
       | ct ->
-         failwith Fmt.(str "core_type_to_jsobject_of: unhandled core_type: %a" Std_derivers.pp_core_type ct)
+         failwith Fmt.(str "core_type_to_jsobject_of: unhandled core_type: %a" Pprintast.core_type ct)
 
     in
     cases
@@ -471,7 +470,7 @@ module Jsobject_of_expander_2 = struct
                    $patt$ -> let v = $expr$ in make_jsobject [|($string:jscid$, v)|] |})
 
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
-               failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %a" Std_derivers.pp_constructor_declaration cd)
+               failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %s" cid)
           )
 
     else if Attrs.define_sum_type_as cl = `AsEnum then
@@ -483,7 +482,7 @@ module Jsobject_of_expander_2 = struct
                {%case| $uid:cid$ -> jsobject_of_string $string:jscid$ |}
 
             | _ ->
-               failwith Fmt.(str "variant type as_enum only with nullary constructors: %a" Std_derivers.pp_constructor_declaration cd)
+               failwith Fmt.(str "variant type as_enum only with nullary constructors")
           )
 
     else assert false
@@ -712,7 +711,7 @@ module Of_jsobject_expander_2 = struct
         {%core_type.noattr.loc| ' $lid:v$ |} ->
         let f = match List.assoc v rho with
             exception Not_found ->
-             failwith Fmt.(str "core_type_to_jsobject_of: unknown type-var %a" Std_derivers.pp_core_type ty)
+             failwith Fmt.(str "core_type_to_jsobject_of: unknown type-var %a" Pprintast.core_type ty)
           | x -> x in
          f
 
@@ -762,13 +761,13 @@ module Of_jsobject_expander_2 = struct
            rfl
            |> List.map (function
                     {%row_field| $_$ |} ->
-                     failwith Fmt.(str "of_jsobject: variant cannot include inheritance: %a" Std_derivers.pp_core_type ty)
+                     failwith Fmt.(str "of_jsobject: variant cannot include inheritance: %a" Pprintast.core_type ty)
                   | {%row_field.noattr.loc| ` $id:cid$ |} ->
                      {%constructor_declaration| $uid:cid$ |}
                   | {%row_field.noattr.loc| ` $id:cid$ of $ty$ |} ->
                      {%constructor_declaration| $uid:cid$ of $ty$ |}
                   | rf ->
-                     failwith Fmt.(str "of_jsobject: unrecognized row_field: %a" Std_derivers.pp_row_field rf)
+                     failwith Fmt.(str "of_jsobject: unrecognized row_field of %a" Pprintast.core_type ty)
                 ) in
          let cases = variant_type_to_of_jsobject ~loc ~polyvariant:true rho cl in
          {%expression| function $list:cases$ |}
@@ -799,7 +798,7 @@ module Of_jsobject_expander_2 = struct
              (fun arr -> $rhs$) |}
 
       | ct ->
-         failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Std_derivers.pp_core_type ct)
+         failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Pprintast.core_type ct)
 
   and record_type_to_of_jsobject ~loc ?(modify_body = (fun x -> x)) rho ll =
     let field_name_jsfldname_var_longid_expr_conv_list =
@@ -981,7 +980,7 @@ module Of_jsobject_expander_2 = struct
                (jscid, rhs)
 
             | {%constructor_declaration.noattr.loc| $uid:cid$ of $list:tyl$ |} ->
-               failwith Fmt.(str "variant type as_object only with nullary/unary constructors: %a" Std_derivers.pp_constructor_declaration cd)
+               failwith Fmt.(str "variant type as_object only with nullary/unary constructors %s" cid)
              ) in
       let cases = 
         jscid_rhs_list
@@ -1016,7 +1015,7 @@ module Of_jsobject_expander_2 = struct
                    {%expression| Ok $uid:cid$ |} in
                (jscid, rhs)
             | _ ->
-               failwith Fmt.(str "variant type as_enum only with nullary constructors: %a" Std_derivers.pp_constructor_declaration cd)
+               failwith Fmt.(str "variant type as_enum only with nullary constructors")
              ) in
       let cases = 
         jscid_rhs_list
