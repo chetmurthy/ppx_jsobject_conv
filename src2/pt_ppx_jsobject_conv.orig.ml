@@ -1,6 +1,11 @@
 module L = List
 open StdLabels
 
+module OrigLocation = Location
+open Ppxlib
+open Asttypes
+(* open Parsetree *)
+
 let convert_down_list_expr f e =
   let rec crec acc = function
       {%expression| [] |} -> List.rev acc
@@ -13,49 +18,6 @@ let convert_down_list_expr f e =
 
 let convert_up_list_expr loc el =
   Stdlib.List.fold_right (fun e rhs -> {%expression| $e$ :: $rhs$ |}) el {%expression| [] |}
-
-module SplitAttributes = struct
-  open Parsetree
-  let core_type ct =
-    { ct with ptyp_attributes = [] }, ct.ptyp_attributes
-end
-
-module OrigLocation = Location
-open Ppxlib
-open Asttypes
-(* open Parsetree *)
-open Ast_builder.Default
-
-let ( --> ) lhs rhs = case ~guard:None ~lhs ~rhs
-
-let wrap_runtime ~loc decls =
-  [%expr let open! Ppx_jsobject_conv_runtime in [%e decls]]
-
-let mk_ep_var ~loc n = evar ~loc n, pvar ~loc n
-
-let input_evar ~loc = evar ~loc "v"
-let input_pvar ~loc = pvar ~loc "v"
-
-let unref ~loc var =
-  let u = evar ~loc "!" in
-  eapply ~loc u [var]
-
-let unref_apply ~loc var args =
-  let unref_var = unref ~loc var in
-  eapply ~loc unref_var args
-
-let ref_ ~loc var =
-  let r = evar ~loc "ref" in
-  eapply ~loc r [var]
-
-let mk_recent core =
-  core ^ "_most_recent"
-
-let mk_recent_ep_var ~loc core =
-  mk_ep_var ~loc (mk_recent core)
-
-let mk_default core =
-  core ^ "_default"
 
 module Attrs = struct
   let name =
@@ -188,7 +150,6 @@ let suppress_unused_rec bindings =
 
 module Jsobject_of_expander_2 = struct
   open Stdlib
-  open Parsetree
   [@@@ocaml.warning "-8"]
   let name_of_tdname name = match name with
     | "t" -> "jsobject_of"
@@ -218,9 +179,9 @@ module Jsobject_of_expander_2 = struct
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
-         let (tvl,ftype) = fun_type ~loc pl tname in
+         let (_tvl,ftype) = fun_type ~loc pl tname in
          let func_name = name_of_tdname tname in
-         [{%signature_item| val $lid:func_name$ : $list:tvl$ . $ftype$ |}]
+         [{%signature_item| val $lid:func_name$ : (* $list:tvl$ . *) $ftype$ |}]
 
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = .. |} ->
          let (tvl, ftype) = fun_type ~loc pl tname in
@@ -230,9 +191,9 @@ module Jsobject_of_expander_2 = struct
          let ref_name = func_name^"_ref" in
          [
            {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $list:tvl$ . $ftype$ }|}
-         ; {%signature_item| val $lid:default_fname$ : $list:tvl$ . $ftype$ |}
+         ; {%signature_item| val $lid:default_fname$ : (* $list:tvl$ . *) $ftype$ |}
          ; {%signature_item| val $lid:ref_name$ : $lid:ref_type_name$ |}
-         ; {%signature_item| val $lid:func_name$ : $list:tvl$ . $ftype$ |}
+         ; {%signature_item| val $lid:func_name$ : (* $list:tvl$ . *) $ftype$ |}
          ]
 
   let sig_type_decl ~loc:_ ~path:_ (_rf, tds) =
@@ -647,7 +608,6 @@ end
 
 module Of_jsobject_expander_2 = struct
   open Stdlib
-  open Parsetree
   [@@@ocaml.warning "-8"]
 
   let name_of_tdname name = match name with
@@ -678,9 +638,9 @@ module Of_jsobject_expander_2 = struct
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = { $list:_$ } |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = $constructorlist:_$ |}
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = $_$ = { $list:_$ } |} ->
-         let (tvl, ftype) = fun_type ~loc pl tname in
+         let (_tvl, ftype) = fun_type ~loc pl tname in
          let func_name = name_of_tdname tname in
-         [{%signature_item| val $lid:func_name$ : $list:tvl$ . $ftype$ |}]
+         [{%signature_item| val $lid:func_name$ : (* $list:tvl$ . *) $ftype$ |}]
 
       | {%type_decl.noattr.loc| $list:pl$ $lid:tname$ = .. |} ->
          let (tvl, ftype) = fun_type ~loc pl tname in
@@ -690,9 +650,9 @@ module Of_jsobject_expander_2 = struct
          let ref_name = func_name^"_ref" in
          [
            {%signature_item| type $lid:ref_type_name$ = { mutable $lid:func_name$ : $list:tvl$ . $ftype$ }|}
-         ; {%signature_item| val $lid:default_fname$ : $list:tvl$ . $ftype$ |}
+         ; {%signature_item| val $lid:default_fname$ : (* $list:tvl$ . *) $ftype$ |}
          ; {%signature_item| val $lid:ref_name$ : $lid:ref_type_name$ |}
-         ; {%signature_item| val $lid:func_name$ : $list:tvl$ . $ftype$ |}
+         ; {%signature_item| val $lid:func_name$ : (* $list:tvl$ . *) $ftype$ |}
          ]
 
   let sig_type_decl ~loc:_ ~path:_ (_rf, tds) =
