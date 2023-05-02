@@ -1,53 +1,82 @@
-module L = List
-open StdLabels
+open Syntax
 
-module OrigLocation = Location
-open Ppxlib
-open Asttypes
-(* open Parsetree *)
+open Stdlib
+open OurSyntax.Ast
+module Longident = Ppxlib.Longident
+open Parsetree
+open Location
 
-let convert_down_list_expr f e =
-  let rec crec acc = function
-      {%expression| [] |} -> List.rev acc
-    | {%expression| $h$ :: $tl$ |} ->
-       crec (f h :: acc) tl
-    | _ -> failwith Fmt.(str "convert_down_list_expr: malformed list-expression %a"
-                           Pprintast.expression e)
-  in
-  crec [] e
+let convFromLib_type_decls (rec_flag,tds) =
+  let loc = Location.none in
+  (match ConvFromLib.copy_structure LibSyntax.Ast.[{%structure_item| type $nonrecflag:rec_flag$ $list:tds$ |}] with
+     OurSyntax.Ast.([{%structure_item| type $nonrecflag:rec_flag$ $list:tds$ |}]) ->  (rec_flag, tds))[@ocaml.warning "-8"]
 
-let convert_up_list_expr loc el =
-  Stdlib.List.fold_right (fun e rhs -> {%expression| $e$ :: $rhs$ |}) el {%expression| [] |}
+module LocOf = struct
+  let constructor_declaration cd = cd.pcd_loc
+  let label_declaration ld = ld.pld_loc
+  let attribute a = a.attr_loc
+end
+
+module Attribute = struct
+  module Context = struct
+    let constructor_declaration cd = cd.pcd_attributes
+    let label_declaration ld  = ld.pld_attributes
+  end
+
+  let attr_names name =
+    let parts = String.split_on_char '.' name in
+    let rec nrec l = match l with
+        [] -> []
+      | _::t ->
+         (String.concat "." l)::(nrec t) in
+    nrec parts
+
+  let declare name ctxt conv =
+    let names = attr_names name in
+    (names, ctxt, conv)
+
+  let get (names, ctxt, conv) it =
+    let l = ctxt it in
+    match l |> List.filter (fun a -> List.mem a.attr_name.txt names) with
+      [] ->  None
+    | h::_ -> Some (conv h)
+end
 
 module Attrs = struct
-  let name =
-    Attribute.declare "jsobject.name"
-                      Attribute.Context.constructor_declaration
-                      (Ast_pattern.single_expr_payload
-                         (Ast_pattern.estring Ast_pattern.__))
-                      (fun x -> x)
+  let name = Attribute.declare "jsobject.name"
+               Attribute.Context.constructor_declaration
+               (function
+                  {%attribute| [@ $attrid:_$ $string:s$ ] |} -> s
+                | a ->
+                   Location.raise_errorf
+                     ~loc:(LocOf.attribute a) "ppx_jsobject_conv: malformed attribute jsobject.name")
 
   let constructor_name cd  =
     match Attribute.get name cd with
     | Some(v) -> v
     | None -> cd.pcd_name.txt
 
-  let key =
-    Attribute.declare "jsobject.key"
-                      Attribute.Context.label_declaration
-                      (Ast_pattern.single_expr_payload
-                         (Ast_pattern.estring Ast_pattern.__))
-                      (fun x -> x)
+  let key = Attribute.declare "jsobject.key"
+               Attribute.Context.label_declaration
+               (function
+                  {%attribute| [@ $attrid:_$ $string:s$ ] |} -> s
+                | a ->
+                   Location.raise_errorf
+                     ~loc:(LocOf.attribute a) "ppx_jsobject_conv: malformed attribute jsobject.key")
+
   let field_name ld =
     match Attribute.get key ld with
     | Some(v) -> v
     | None -> ld.pld_name.txt
 
-  let drop_none =
-    Attribute.declare "jsobject.drop_none"
-      Attribute.Context.label_declaration
-      Ast_pattern.(pstr nil)
-      ()
+  let drop_none = Attribute.declare "jsobject.drop_none"
+               Attribute.Context.label_declaration
+               (function
+                  {%attribute| [@ $attrid:_$ ] |} -> ()
+                | a ->
+                   Location.raise_errorf
+                     ~loc:(LocOf.attribute a) "ppx_jsobject_conv: malformed attribute jsobject.drop_none")
+
   let should_drop_none ld =
     match Attribute.get drop_none ld with
     | Some(_) ->
@@ -69,19 +98,21 @@ module Attrs = struct
        in true
     | None -> false
 
-  let default_on_error =
-    let open! Ast_pattern in
-    Attribute.declare "jsobject.default_on_error"
-                      Attribute.Context.label_declaration
-                      (Ast_pattern.pstr (pstr_eval __ nil ^:: nil))
-                      (fun x -> x)
+  let default_on_error = Attribute.declare "jsobject.default_on_error"
+               Attribute.Context.label_declaration
+               (function
+                  {%attribute| [@ $attrid:_$ $expr:e$ ] |} -> e
+                | a ->
+                   Location.raise_errorf
+                     ~loc:(LocOf.attribute a) "ppx_jsobject_conv: malformed attribute jsobject.default_on_error")
 
-  let default =
-    let open! Ast_pattern in
-    Attribute.declare "jsobject.default"
-                      Attribute.Context.label_declaration
-                      (Ast_pattern.pstr (pstr_eval __ nil ^:: nil))
-                      (fun x -> x)
+  let default = Attribute.declare "jsobject.default"
+               Attribute.Context.label_declaration
+               (function
+                  {%attribute| [@ $attrid:_$ $expr:e$ ] |} -> e
+                | a ->
+                   Location.raise_errorf
+                     ~loc:(LocOf.attribute a) "ppx_jsobject_conv: malformed attribute jsobject.default")
 
   let error_default ld =
     match (Attribute.get default_on_error ld), (Attribute.get default ld) with
@@ -112,12 +143,14 @@ module Attrs = struct
     | None -> None
 
   type sum_type_conversion = [`Regular | `AsObject | `AsEnum | `AsTagless]
-  let sum_type_as =
-    Attribute.declare "jsobject.sum_type_as"
-                      Attribute.Context.constructor_declaration
-                      (Ast_pattern.single_expr_payload
-                         (Ast_pattern.estring Ast_pattern.__))
-                      (fun x -> x)
+
+  let sum_type_as = Attribute.declare "jsobject.sum_type_as"
+               Attribute.Context.constructor_declaration
+               (function
+                  {%attribute| [@ $attrid:_$ $string:s$ ] |} -> s
+                | a ->
+                   Location.raise_errorf
+                     ~loc:(LocOf.attribute a) "ppx_jsobject_conv: malformed attribute jsobject.sum_type_as")
 
   let define_constructor_as cd  =
     match Attribute.get sum_type_as cd with
@@ -125,13 +158,13 @@ module Attrs = struct
     | Some("enum") -> `AsEnum
     | Some("tagless") -> `AsTagless
     | Some("regular") -> `Regular
-    | Some(b) -> Location.raise_errorf ~loc:cd.pcd_loc "ppx_jsobject_conv: sum_type_as only accepts object/enum/tagless/regular, got %s" b
+    | Some(b) -> Location.raise_errorf ~loc:(LocOf.constructor_declaration cd) "ppx_jsobject_conv: sum_type_as only accepts object/enum/tagless/regular, got %s" b
     | None -> `Regular
 
   let define_sum_type_as cds =
-    let conversions = List.map ~f:define_constructor_as cds in
-    let uniq = L.sort_uniq compare conversions in
-    let special = List.filter ~f:(function
+    let conversions = List.map define_constructor_as cds in
+    let uniq = List.sort_uniq Stdlib.compare conversions in
+    let special = List.filter (function
                                   | `Regular -> false
                                   | _ -> true) uniq in
     match special with
@@ -142,14 +175,26 @@ module Attrs = struct
              "ppx_jsobject_conv: sum type should have at most one distinct sum_type_as attribute"
 end
 
+let convert_down_list_expr f e =
+  let rec crec acc = function
+      {%expression| [] |} -> List.rev acc
+    | {%expression| $h$ :: $tl$ |} ->
+       crec (f h :: acc) tl
+    | _ -> failwith Fmt.(str "convert_down_list_expr: malformed list-expression %a"
+                           pp_expression e)
+  in
+  crec [] e
+
+let convert_up_list_expr loc el =
+  List.fold_right (fun e rhs -> {%expression| $e$ :: $rhs$ |}) el {%expression| [] |}
+
 let suppress_unused_rec bindings =
   match bindings with
     [] ->  assert false
   | {%value_binding.noattr.loc| $patt$ = $expr$ |}::t ->
      {%value_binding.loc| $patt$ = $expr$ [@@ocaml.warning "-39"] |}::t
 
-module Jsobject_of_expander_2 = struct
-  open Stdlib
+module Jsobject_of_expander = struct
   [@@@ocaml.warning "-8"]
   let name_of_tdname name = match name with
     | "t" -> "jsobject_of"
@@ -158,7 +203,7 @@ module Jsobject_of_expander_2 = struct
   let name_of_td td = name_of_tdname td.ptype_name.txt
   let name_of_te te = name_of_tdname @@ Longident.last_exn te.ptyext_path.txt
 
-  let converter_type ty : core_type =
+  let converter_type ty =
     let loc = match ty with {%core_type.noattr.loc| $_$ |} -> loc in
     {%core_type| $ty$ -> Js_of_ocaml.Js.Unsafe.any Js_of_ocaml.Js.t |}
 
@@ -168,7 +213,7 @@ module Jsobject_of_expander_2 = struct
       List.fold_right (fun (pv, _) rhs_t ->
           {%core_type| $converter_type pv$ -> $rhs_t$ |})
         pl rhs_t in
-    let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
+    let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> Location.{txt=v; loc=loc}) pl in
     (tvl, ftype)
 
   let td_to_sig_items td =
@@ -236,12 +281,12 @@ module Jsobject_of_expander_2 = struct
     let cases = core_type_to_jsobject_of rho ty in
     {%expression| function $list:cases$ |}
 
-  and core_type_to_jsobject_of ?(modify_pattern = (fun x -> x)) ?(modify_body=(fun x -> x)) rho ty : case list =
+  and core_type_to_jsobject_of ?(modify_pattern = (fun x -> x)) ?(modify_body=(fun x -> x)) rho ty =
     let cases = match ty with
         {%core_type.noattr.loc| ' $lid:v$ |} ->
         let f = match List.assoc v rho with
             exception Not_found ->
-             failwith Fmt.(str "core_type_to_jsobject_of: unknown type-var %a" Pprintast.core_type ty)
+             failwith Fmt.(str "core_type_to_jsobject_of: unknown type-var %a" pp_core_type ty)
           | x -> x in
          [{%case| v -> $f$ v |}]
 
@@ -291,13 +336,13 @@ module Jsobject_of_expander_2 = struct
            rfl
            |> List.map (function
                     {%row_field| $_$ |} ->
-                     failwith Fmt.(str "jsobject_of: variant cannot include inheritance: %a" Pprintast.core_type ty)
+                     failwith Fmt.(str "jsobject_of: variant cannot include inheritance: %a" pp_core_type ty)
                   | {%row_field.noattr.loc| ` $id:cid$ |} ->
                      {%constructor_declaration| $uid:cid$ |}
                   | {%row_field.noattr.loc| ` $id:cid$ of $ty$ |} ->
                      {%constructor_declaration| $uid:cid$ of $ty$ |}
                   | rf ->
-                     failwith Fmt.(str "jsobject_of: unrecognized row_field in type %a" Pprintast.core_type ty)
+                     failwith Fmt.(str "jsobject_of: unrecognized row_field in type %a" pp_core_type ty)
                 ) in
          variant_type_to_jsobject_of ~loc ~polyvariant:true rho cl
 
@@ -321,7 +366,7 @@ module Jsobject_of_expander_2 = struct
                       var_patt_expr_conv_list rhs in
          [{%case| $patt$ -> $body$ |}]
       | ct ->
-         failwith Fmt.(str "core_type_to_jsobject_of: unhandled core_type: %a" Pprintast.core_type ct)
+         failwith Fmt.(str "core_type_to_jsobject_of: unhandled core_type: %a" pp_core_type ct)
 
     in
     cases
@@ -337,7 +382,7 @@ module Jsobject_of_expander_2 = struct
       |> List.map (function
                {%label_declaration.noattr.loc| $mutable:_$ $lid:fldname$ : $fldty$ |} as ld ->
                let var = Printf.sprintf "v_%s" fldname in
-               let longid = OrigLocation.mkloc {%longident_t| $lid:fldname$ |} loc in
+               let longid = Location.mkloc {%longident_t| $lid:fldname$ |} loc in
                let patt = {%pattern| $lid:var$ |} in
                let conv = core_type_to_jsobject_of rho fldty in
                let jsfldname = Attrs.field_name ld in
@@ -581,32 +626,7 @@ module Jsobject_of_expander_2 = struct
 
 end
 
-module Jsobject_of = struct
-  let str_type_decl =
-    Ppxlib.Deriving.Generator.make_noarg
-      Jsobject_of_expander_2.str_type_decl
-      ~attributes:[Attribute.T Attrs.name;
-                   Attribute.T Attrs.key;
-                   Attribute.T Attrs.sum_type_as;
-                   Attribute.T Attrs.drop_none;
-                  ]
-
-  let sig_type_decl =
-    Ppxlib.Deriving.Generator.make_noarg Jsobject_of_expander_2.sig_type_decl
-
-  let str_type_ext =
-    Ppxlib.Deriving.Generator.make_noarg Jsobject_of_expander_2.str_type_ext
-
-  let name = "jsobject_of"
-
-  let deriver =
-    Ppxlib.Deriving.add name
-      ~str_type_decl
-      ~sig_type_decl
-      ~str_type_ext
-end
-
-module Of_jsobject_expander_2 = struct
+module Of_jsobject_expander = struct
   open Stdlib
   [@@@ocaml.warning "-8"]
 
@@ -617,7 +637,7 @@ module Of_jsobject_expander_2 = struct
   let name_of_td td = name_of_tdname td.ptype_name.txt
   let name_of_te te = name_of_tdname @@ Longident.last_exn te.ptyext_path.txt
 
-  let converter_type ty : core_type =
+  let converter_type ty =
     let loc = match ty with {%core_type.noattr.loc| $_$ |} -> loc in
     {%core_type| Js_of_ocaml.Js.Unsafe.any Js_of_ocaml.Js.t -> ($ty$, string) result |}
 
@@ -627,7 +647,7 @@ module Of_jsobject_expander_2 = struct
       List.fold_right (fun (pv, _) rhs_t ->
           {%core_type| $converter_type pv$ -> $rhs_t$ |})
         pl rhs_t in
-    let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> OrigLocation.{txt=v; loc=loc}) pl in
+    let tvl = List.map (fun ({%core_type.noattr| ' $lid:v$ |}, _) -> Location.{txt=v; loc=loc}) pl in
     (tvl, ftype)
 
   let td_to_sig_items td =
@@ -671,7 +691,7 @@ module Of_jsobject_expander_2 = struct
         {%core_type.noattr.loc| ' $lid:v$ |} ->
         let f = match List.assoc v rho with
             exception Not_found ->
-             failwith Fmt.(str "core_type_to_jsobject_of: unknown type-var %a" Pprintast.core_type ty)
+             failwith Fmt.(str "core_type_to_jsobject_of: unknown type-var %a" pp_core_type ty)
           | x -> x in
          f
 
@@ -721,13 +741,13 @@ module Of_jsobject_expander_2 = struct
            rfl
            |> List.map (function
                     {%row_field| $_$ |} ->
-                     failwith Fmt.(str "of_jsobject: variant cannot include inheritance: %a" Pprintast.core_type ty)
+                     failwith Fmt.(str "of_jsobject: variant cannot include inheritance: %a" pp_core_type ty)
                   | {%row_field.noattr.loc| ` $id:cid$ |} ->
                      {%constructor_declaration| $uid:cid$ |}
                   | {%row_field.noattr.loc| ` $id:cid$ of $ty$ |} ->
                      {%constructor_declaration| $uid:cid$ of $ty$ |}
                   | rf ->
-                     failwith Fmt.(str "of_jsobject: unrecognized row_field of %a" Pprintast.core_type ty)
+                     failwith Fmt.(str "of_jsobject: unrecognized row_field of %a" pp_core_type ty)
                 ) in
          let cases = variant_type_to_of_jsobject ~loc ~polyvariant:true rho cl in
          {%expression| function $list:cases$ |}
@@ -758,7 +778,7 @@ module Of_jsobject_expander_2 = struct
              (fun arr -> $rhs$) |}
 
       | ct ->
-         failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" Pprintast.core_type ct)
+         failwith Fmt.(str "core_type_to_of_jsobject: unhandled core_type: %a" pp_core_type ct)
 
   and record_type_to_of_jsobject ~loc ?(modify_body = (fun x -> x)) rho ll =
     let field_name_jsfldname_var_longid_expr_conv_list =
@@ -766,7 +786,7 @@ module Of_jsobject_expander_2 = struct
       |> List.map (function
                {%label_declaration.noattr.loc| $mutable:_$ $lid:fldname$ : $fldty$ |} as ld ->
                let var = Printf.sprintf "v_%s" fldname in
-               let longid = OrigLocation.mkloc {%longident_t| $lid:fldname$ |} loc in
+               let longid = Location.mkloc {%longident_t| $lid:fldname$ |} loc in
                let expr = {%expression| $lid:var$ |} in
                let conv = core_type_to_of_jsobject rho fldty in
                let conv = match Attrs.field_default ld, Attrs.error_default ld with
@@ -1133,39 +1153,3 @@ module Of_jsobject_expander_2 = struct
     ]
 
 end
-
-module Of_jsobject = struct
-  let str_type_decl =
-    Ppxlib.Deriving.Generator.make_noarg
-      Of_jsobject_expander_2.str_type_decl
-      ~attributes:[Attribute.T Attrs.name;
-                   Attribute.T Attrs.key;
-                   Attribute.T Attrs.sum_type_as;
-                   Attribute.T Attrs.default;
-                   Attribute.T Attrs.default_on_error;
-                  ]
-
-  let sig_type_decl =
-    Ppxlib.Deriving.Generator.make_noarg Of_jsobject_expander_2.sig_type_decl
-
-  let str_type_ext =
-    Ppxlib.Deriving.Generator.make_noarg Of_jsobject_expander_2.str_type_ext
-
-  let name = "of_jsobject"
-
-  let deriver =
-    Ppxlib.Deriving.add name
-      ~str_type_decl
-      ~sig_type_decl
-      ~str_type_ext
-end
-
-
-let () =
-  Ppxlib.Deriving.add_alias "jsobject"
-                      [Jsobject_of.deriver ;
-                       Of_jsobject.deriver
-                      ]
-                      ~sig_exception:[Jsobject_of.deriver]
-                      ~str_exception:[Jsobject_of.deriver]
-  |> Ppxlib.Deriving.ignore;;
