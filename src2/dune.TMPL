@@ -13,5 +13,5 @@
    )
  (action
  (with-stdout-to %{target}
-  (run not-ocamlfind preprocess -package fmt,unix,camlp5,ounit2,pa_ppx.utils,camlp5.pr_dump -package pa_ppx.deriving_plugins.std,pa_ppx_parsetree.quotations_413,pa_ppx_quotation2extension -syntax camlp5o  %{src})
+  (run not-ocamlfind preprocess -package fmt,unix,camlp5,ounit2,pa_ppx.utils,camlp5.pr_dump -package pa_ppx.deriving_plugins.std,pa_ppx_parsetree.quotations_OURVERSION,pa_ppx_quotation2extension -syntax camlp5o  %{src})
   )))

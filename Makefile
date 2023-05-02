@@ -26,6 +26,10 @@ reinstall: $(NAME).install
 	opam-installer -u --prefix $(PREFIX) $(NAME).install &> /dev/null || true
 	opam-installer -i --prefix $(PREFIX) $(NAME).install
 
+setup:
+	perl -p -e 's,OURVERSION,'$(OURVERSION)',g' src2/dune.TMPL > src2/dune
+	perl -p -e 's,OURVERSION,'$(OURVERSION)',g' src2/syntax.ml.TMPL > src2/syntax.ml
+
 .PHONY: build driver test clean
 
 

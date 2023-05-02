@@ -1,7 +1,7 @@
 open Ppxlib
 
 module LibSyntax = Ppxlib_ast__.Versions.OCaml_414
-module OurSyntax = Ppxlib_ast__.Versions.OCaml_413
+module OurSyntax = Ppxlib_ast__.Versions.OCaml_OURVERSION
 
 module ConvToLib = Ppxlib_ast__.Versions.Convert(OurSyntax) (LibSyntax)
 module ConvFromLib = Ppxlib_ast__.Versions.Convert(LibSyntax)(OurSyntax)
